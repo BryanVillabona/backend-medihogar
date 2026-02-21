@@ -1,18 +1,28 @@
-// Este middleware recibe un "schema" de Zod como parámetro
+import { ZodError } from 'zod';
+
 export const validateSchema = (schema) => (req, res, next) => {
   try {
-    // Intenta validar el cuerpo de la petición contra el esquema
     schema.parse(req.body);
-    next(); // Si todo está perfecto, avanza al controlador
+    next();
   } catch (error) {
-    // Si falla, mapeamos los errores para decirle al frontend exactamente qué campo está mal
-    return res.status(400).json({
+    // 1. Si es un error de validación de Zod, respondemos con 400
+    if (error instanceof ZodError) {
+      return res.status(400).json({
+        success: false,
+        message: 'Error de validación de datos',
+        errors: error.errors.map(err => ({
+          campo: err.path.join('.'), // Usar join es más seguro por si el path es profundo
+          mensaje: err.message
+        }))
+      });
+    }
+
+    // 2. Si es otro tipo de error (ej. schema undefined), lo atrapamos y logueamos
+    console.error("🚨 Error crítico en middleware de validación:", error);
+    return res.status(500).json({
       success: false,
-      message: 'Error de validación de datos',
-      errors: error.errors.map(err => ({
-        campo: err.path[0],
-        mensaje: err.message
-      }))
+      message: 'Error interno del servidor al validar',
+      error: error.message
     });
   }
 };
