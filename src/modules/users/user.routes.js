@@ -1,12 +1,15 @@
 import { Router } from 'express';
 import { createUser, getUsers } from './user.controller.js';
+import { verifyToken, verifyAdmin } from '../../core/middlewares/auth.middleware.js';
+import { validateSchema } from '../../core/middlewares/validate.middleware.js';
+import { createUserSchema } from './user.schema.js';
 
 const router = Router();
 
-// POST /api/users -> Para registrar un usuario/empleada
-router.post('/', createUser);
+// Solo un ADMIN logueado puede crear usuarios, y los datos deben ser válidos
+router.post('/', verifyToken, verifyAdmin, validateSchema(createUserSchema), createUser);
 
-// GET /api/users -> Para listar todos los usuarios
-router.get('/', getUsers);
+// Solo listamos usuarios si estás logueado y eres ADMIN (las empleadas no necesitan ver la lista de personal)
+router.get('/', verifyToken, verifyAdmin, getUsers);
 
 export default router;

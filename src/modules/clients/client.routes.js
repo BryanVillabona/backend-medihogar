@@ -1,12 +1,13 @@
 import { Router } from 'express';
 import { createClient, getActiveClients } from './client.controller.js';
-// 1. Importamos el middleware de seguridad
-import { verifyToken } from '../../core/middlewares/auth.middleware.js';
+import { verifyToken, verifyAdmin } from '../../core/middlewares/auth.middleware.js';
+import { validateSchema } from '../../core/middlewares/validate.middleware.js';
+import { createClientSchema } from './client.schema.js';
 
 const router = Router();
 
-// 2. Protegemos ambas rutas
-router.post('/', verifyToken, createClient);
+// Protegido: Solo Admin registra clientes
+router.post('/', verifyToken, verifyAdmin, validateSchema(createClientSchema), createClient);
 router.get('/', verifyToken, getActiveClients);
 
 export default router;

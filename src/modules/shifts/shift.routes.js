@@ -1,13 +1,21 @@
 import { Router } from 'express';
 import { createShift, getShifts } from './shift.controller.js';
-// 1. Importamos el Guardián
-import { verifyToken } from '../../core/middlewares/auth.middleware.js';
+import { verifyToken, verifyAdmin } from '../../core/middlewares/auth.middleware.js';
+
+// Importamos el validador y el esquema
+import { validateSchema } from '../../core/middlewares/validate.middleware.js';
+import { createShiftSchema } from './shift.schema.js';
 
 const router = Router();
 
-// 2. Colocamos el Guardián como segundo parámetro
-// Si verifyToken falla, la petición muere ahí y nunca llega a createShift
-router.post('/', verifyToken, createShift);
+// Cadena de seguridad: 
+// 1. ¿Tienes Token? (verifyToken)
+// 2. ¿Eres Admin? (verifyAdmin)
+// 3. ¿Los datos son perfectos? (validateSchema)
+// 4. Crea el turno (createShift)
+router.post('/', verifyToken, verifyAdmin, validateSchema(createShiftSchema), createShift);
+
+// Para ver los turnos, solo necesitas estar logueado (No validamos body porque es un GET)
 router.get('/', verifyToken, getShifts);
 
 export default router;
