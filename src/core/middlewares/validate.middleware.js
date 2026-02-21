@@ -10,14 +10,16 @@ export const validateSchema = (schema) => (req, res, next) => {
       return res.status(400).json({
         success: false,
         message: 'Error de validación de datos',
-        errors: error.errors.map(err => ({
-          campo: err.path.join('.'), // Usar join es más seguro por si el path es profundo
-          mensaje: err.message
+        // ¡El cambio clave está aquí! Usamos error.issues
+        errors: error.issues.map(issue => ({
+          // path es un array, lo unimos. Si viene vacío, indicamos 'cuerpo_peticion'
+          campo: issue.path.join('.') || 'cuerpo_peticion',
+          mensaje: issue.message
         }))
       });
     }
 
-    // 2. Si es otro tipo de error (ej. schema undefined), lo atrapamos y logueamos
+    // 2. Si es otro tipo de error, lo atrapamos y logueamos
     console.error("🚨 Error crítico en middleware de validación:", error);
     return res.status(500).json({
       success: false,
