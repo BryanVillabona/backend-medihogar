@@ -86,3 +86,43 @@ export const getShifts = async (req, res) => {
     res.status(500).json({ success: false, message: 'Error al obtener turnos', error: error.message });
   }
 };
+
+export const cancelShift = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const shift = await Shift.findById(id);
+    if (!shift) {
+      return res.status(404).json({ success: false, message: 'Turno no encontrado' });
+    }
+
+    // Validaciones de negocio usando tu modelo
+    if (shift.estado_turno === 'CANCELADO') {
+      return res.status(400).json({ success: false, message: 'El turno ya se encuentra cancelado' });
+    }
+    if (shift.estado_turno === 'FINALIZADO') {
+      return res.status(400).json({ success: false, message: 'No se puede cancelar un turno que ya finalizó' });
+    }
+
+    // Cambiamos el estado usando tu campo
+    shift.estado_turno = 'CANCELADO';
+    await shift.save();
+
+    // Reversamos el cobro al cliente
+    await Client.findByIdAndUpdate(shift.cliente_id, {
+      $inc: { saldo_pendiente: -shift.precio_cobrado }
+    });
+
+    res.status(200).json({
+      success: true,
+      message: 'Turno cancelado. El saldo del cliente ha sido ajustado.'
+    });
+
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Error al cancelar el turno',
+      error: error.message
+    });
+  }
+};

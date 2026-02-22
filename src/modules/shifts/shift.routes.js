@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { createShift, getShifts } from './shift.controller.js';
+import { createShift, getShifts, cancelShift } from './shift.controller.js';
 import { verifyToken, verifyAdmin } from '../../core/middlewares/auth.middleware.js';
 
 // Importamos el validador y el esquema
@@ -17,5 +17,7 @@ router.post('/', verifyToken, verifyAdmin, validateSchema(createShiftSchema), cr
 
 // Para ver los turnos, solo necesitas estar logueado (No validamos body porque es un GET)
 router.get('/', verifyToken, getShifts);
+
+router.patch('/:id/cancel', verifyToken, verifyAdmin, cancelShift);
 
 export default router;
