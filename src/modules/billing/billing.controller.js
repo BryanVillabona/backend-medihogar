@@ -142,3 +142,60 @@ export const generateClientStatement = async (req, res) => {
     res.status(500).json({ success: false, message: 'Error al generar estado de cuenta', error: error.message });
   }
 };
+
+// =========================================================================
+// 3. REPORTE GERENCIAL GLOBAL (Reemplazo de la hoja T. SERVICIOS del Excel)
+// =========================================================================
+export const getGlobalReport = async (req, res) => {
+  try {
+    const { mes, anio } = req.query;
+    
+    if (!mes || !anio) {
+      return res.status(400).json({ success: false, message: 'Debe proveer mes y año' });
+    }
+
+    const startDate = new Date(anio, mes - 1, 1);
+    const endDate = new Date(anio, mes, 0, 23, 59, 59);
+
+    // 1. Buscamos TODOS los turnos finalizados de la empresa en ese mes
+    const turnos = await Shift.find({
+      fecha_servicio: { $gte: startDate, $lte: endDate },
+      estado_turno: 'FINALIZADO'
+    });
+
+    const ingresosBrutos = turnos.reduce((sum, t) => sum + t.precio_cobrado, 0);
+    const nominaBase = turnos.reduce((sum, t) => sum + t.costo_pagado, 0);
+
+    // 2. Buscamos TODAS las novedades financieras de la empresa
+    const novedades = await PayrollAdjustment.find({
+      fecha_aplicacion: { $gte: startDate, $lte: endDate }
+    });
+
+    let totalBonosPagados = 0;
+    let totalPrestamosDescontados = 0;
+
+    novedades.forEach(nov => {
+      if (nov.tipo_movimiento === 'INGRESO') totalBonosPagados += nov.monto;
+      if (nov.tipo_movimiento === 'EGRESO') totalPrestamosDescontados += nov.monto;
+    });
+
+    // 3. Matemática de la Empresa
+    // Egresos reales = Nómina base de turnos + Bonos regalados - Préstamos recuperados
+    const egresosNetos = (nominaBase + totalBonosPagados) - totalPrestamosDescontados;
+    const utilidadBruta = ingresosBrutos - egresosNetos;
+
+    res.status(200).json({
+      success: true,
+      data: {
+        periodo: `${mes}-${anio}`,
+        total_turnos_operados: turnos.length,
+        ingresos_brutos: ingresosBrutos,
+        egresos_nomina: egresosNetos,
+        utilidad_bruta: utilidadBruta
+      }
+    });
+
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Error al generar reporte global', error: error.message });
+  }
+};

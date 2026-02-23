@@ -39,3 +39,13 @@ export const getActiveServices = async (req, res) => {
     });
   }
 };
+
+export const updateService = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const updatedService = await Catalog.findByIdAndUpdate(id, req.body, { new: true });
+    res.status(200).json({ success: true, data: updatedService });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Error al actualizar tarifa' });
+  }
+};

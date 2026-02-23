@@ -96,8 +96,11 @@ export const completeShift = async (req, res) => {
 // Obtener los turnos (Podemos filtrarlos luego, por ahora traemos todos)
 export const getShifts = async (req, res) => {
   try {
-    // Usamos .populate() para que MongoDB nos traiga los datos del cliente y la empleada, no solo el ID
-    const turnos = await Shift.find()
+    // req.user viene de tu middleware verifyToken
+    // CORRECCIÓN: Usamos req.user.rol en vez de rol_sistema para que coincida con tu JWT
+    const filtro = req.user.rol === 'ADMIN' ? {} : { empleada_id: req.user._id || req.user.id };
+
+    const turnos = await Shift.find(filtro)
       .populate('cliente_id', 'nombre_paciente nombre_responsable')
       .populate('empleada_id', 'nombre_completo tipo_empleada');
       

@@ -1,6 +1,6 @@
 import { Router } from 'express';
 // 1. Importamos las funciones propias de billing (Nómina y Facturas)
-import { calculateEmployeePayroll, generateClientStatement } from './billing.controller.js';
+import { calculateEmployeePayroll, generateClientStatement, getGlobalReport } from './billing.controller.js';
 // 2. Importamos la función de pagos
 import { registerPayment } from './payment.controller.js';
 // 3. AQUÍ ESTÁ LA SOLUCIÓN: Importamos las novedades desde el módulo de payroll
@@ -30,5 +30,7 @@ router.get('/statement/:clienteId', verifyToken, verifyAdmin, generateClientStat
 
 // Registrar un pago/abono
 router.post('/payments', verifyToken, verifyAdmin, validateSchema(registerPaymentSchema), registerPayment);
+
+router.get('/report/global', verifyToken, verifyAdmin, getGlobalReport);
 
 export default router;
