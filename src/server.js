@@ -19,13 +19,12 @@ const crearAdminPorDefecto = async () => {
       console.log('🌱 Base de datos vacía detectada. Creando Super Administrador...');
 
       const salt = await bcrypt.genSalt(10);
-      const hashedPassword = await bcrypt.hash('admin123', salt);
+      const hashedPassword = await bcrypt.hash('jorgoc5p', salt);
 
       const adminDefecto = new User({
-        cedula: '123456789',
+        cedula: '0000000000',
         nombre_completo: 'Administrador Principal',
         celular: '0000000000',
-        email: 'admin@medihogar.com',
         password: hashedPassword,
         rol_sistema: 'ADMIN',
         // Si tu esquema exige 'tipo_empleada', le ponemos 'NA' por ser Admin

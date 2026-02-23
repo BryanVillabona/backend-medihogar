@@ -19,22 +19,23 @@ export const login = async (req, res) => {
     }
 
     // 3. Generar el JWT (El "Carnet" digital)
-    // Usamos el _id y el rol para saber quién es y qué puede hacer
     const payload = {
       id: user._id,
       rol: user.rol_sistema 
     };
 
-    // Firmamos el token con una clave secreta (que pondremos en el .env)
     const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '8h' });
 
+    // LA SOLUCIÓN: Enviamos TODOS los datos clave al frontend
     res.status(200).json({
       success: true,
       message: 'Login exitoso',
       token,
       user: {
-        nombre: user.nombre_completo,
-        rol: user.rol_sistema
+        _id: user._id,                   
+        cedula: user.cedula,             
+        nombre: user.nombre_completo,  // <-- VOLVEMOS A LLAMARLO "nombre"
+        rol: user.rol_sistema          // <-- VOLVEMOS A LLAMARLO "rol"
       }
     });
 
