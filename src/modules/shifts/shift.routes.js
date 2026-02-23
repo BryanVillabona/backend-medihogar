@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { createShift, getShifts, cancelShift } from './shift.controller.js';
+import { createShift, getShifts, cancelShift, completeShift, updateShift } from './shift.controller.js';
 import { verifyToken, verifyAdmin } from '../../core/middlewares/auth.middleware.js';
 
 // Importamos el validador y el esquema
@@ -19,5 +19,9 @@ router.post('/', verifyToken, verifyAdmin, validateSchema(createShiftSchema), cr
 router.get('/', verifyToken, getShifts);
 
 router.patch('/:id/cancel', verifyToken, verifyAdmin, cancelShift);
+
+router.put('/:id/complete', completeShift);
+
+router.put('/:id', updateShift);
 
 export default router;

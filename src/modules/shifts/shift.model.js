@@ -17,15 +17,20 @@ const shiftSchema = new Schema({
   },
   jornada: {
     type: String,
-    enum: ['DIA', 'NOCHE'], // ¡Aquí está la regla de negocio que mencionaste!
+    enum: ['DIA', 'NOCHE'],
     required: true
   },
   duracion_horas: {
     type: Number,
     required: true // Ej. 10 o 12
   },
+  // NUEVO: Fundamental para personal flotante (Turnadoras)
+  rol_ejercido: {
+    type: String,
+    enum: ['AUXILIAR', 'CUIDADORA'],
+    required: true
+  },
   // --- ZONA FINANCIERA (DATOS CONGELADOS) ---
-  // Estos datos se copian del Catálogo en el momento de crear el turno
   precio_cobrado: {
     type: Number,
     required: true 
@@ -36,7 +41,7 @@ const shiftSchema = new Schema({
   },
   // ------------------------------------------
   novedades: {
-    type: String, // Por si llegó tarde, o si le dieron un auxilio extra de transporte
+    type: String,
     default: ''
   },
   estado_turno: {
