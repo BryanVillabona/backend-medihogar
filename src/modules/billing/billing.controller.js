@@ -2,11 +2,10 @@ import Shift from '../shifts/shift.model.js';
 import User from '../users/user.model.js';
 import Client from '../clients/client.model.js'; 
 import Payment from './payment.model.js'; 
-// Importamos el nuevo modelo de novedades que creamos antes
 import PayrollAdjustment from '../payroll/payrollAdjustment.model.js'; 
 
 // =========================================================================
-// 1. NÓMINA: Liquidar a una empleada (Tu función mejorada con las reglas)
+// 1. NÓMINA: Liquidar a una empleada
 // =========================================================================
 export const calculateEmployeePayroll = async (req, res) => {
   try {
@@ -25,17 +24,17 @@ export const calculateEmployeePayroll = async (req, res) => {
     // A. Buscar turnos (Regla de oro: SOLO LOS FINALIZADOS)
     const turnos = await Shift.find({
       empleada_id: empleadaId,
-      estado_turno: 'FINALIZADO', // Si no está finalizado, no se paga
+      estado_turno: 'FINALIZADO',
       fecha_servicio: {
         $gte: new Date(startDate),
         $lte: new Date(endDate)
       }
     });
 
-    // B. Buscar novedades (Préstamos y Bonificaciones en ese rango de fechas)
+    // B. Buscar novedades
     const novedades = await PayrollAdjustment.find({
       empleada_id: empleadaId,
-      estado: 'PENDIENTE', // Solo cobramos/pagamos lo que no se haya aplicado antes
+      estado: 'PENDIENTE',
       fecha_aplicacion: {
         $gte: new Date(startDate),
         $lte: new Date(endDate)
@@ -55,7 +54,7 @@ export const calculateEmployeePayroll = async (req, res) => {
 
     const netoPagar = (totalGanadoTurnos + totalBonos) - totalDeducciones;
 
-    // D. Devolver el reporte tipo "Desprendible de pago"
+    // D. Devolver el reporte
     res.status(200).json({
       success: true,
       message: `Nómina calculada para ${empleada.nombre_completo}`,
@@ -84,7 +83,7 @@ export const calculateEmployeePayroll = async (req, res) => {
 // =========================================================================
 export const generateClientStatement = async (req, res) => {
   try {
-    const { clienteId } = req.params; // Ej: /api/billing/statement/12345?startDate=...
+    const { clienteId } = req.params;
     const { startDate, endDate } = req.query;
 
     if (!startDate || !endDate) {
@@ -94,10 +93,10 @@ export const generateClientStatement = async (req, res) => {
     const cliente = await Client.findById(clienteId).select('nombre_responsable nombre_paciente saldo_pendiente');
     if (!cliente) return res.status(404).json({ success: false, message: 'Cliente no encontrado' });
 
-    // A. Obtener el detalle de los turnos que se le prestaron en esa fecha
+    // A. Obtener detalle de turnos
     const turnosDelMes = await Shift.find({
       cliente_id: clienteId,
-      estado_turno: 'FINALIZADO', // Solo se cobran los ejecutados
+      estado_turno: 'FINALIZADO',
       fecha_servicio: { 
         $gte: new Date(startDate), 
         $lte: new Date(endDate) 
@@ -106,7 +105,7 @@ export const generateClientStatement = async (req, res) => {
 
     const totalFacturadoMes = turnosDelMes.reduce((sum, t) => sum + t.precio_cobrado, 0);
 
-    // B. Obtener los pagos/abonos que hizo el cliente en esa fecha
+    // B. Obtener pagos
     const pagosDelMes = await Payment.find({
       cliente_id: clienteId,
       fecha_pago: { 
@@ -117,21 +116,21 @@ export const generateClientStatement = async (req, res) => {
 
     const totalPagadoMes = pagosDelMes.reduce((sum, p) => sum + p.monto_pagado, 0);
 
-    // C. Generar el documento final (Reemplazo de la hoja de Excel del cliente)
+    // C. Generar documento
     res.status(200).json({
       success: true,
       data: {
         cliente: {
           nombre: cliente.nombre_responsable,
           paciente: cliente.nombre_paciente,
-          saldo_historico_pendiente_total: cliente.saldo_pendiente // La deuda global en la BD
+          saldo_historico_pendiente_total: cliente.saldo_pendiente
         },
         periodo_consultado: `${startDate} al ${endDate}`,
         resumen_periodo: {
           total_turnos_realizados: turnosDelMes.length,
           subtotal_facturado_rango: totalFacturadoMes,
           total_abonos_recibidos: totalPagadoMes,
-          balance_del_rango: totalFacturadoMes - totalPagadoMes // Lo que se generó de deuda nueva vs lo pagado en este mes
+          balance_del_rango: totalFacturadoMes - totalPagadoMes
         },
         detalle_turnos: turnosDelMes,
         detalle_pagos: pagosDelMes
@@ -144,7 +143,7 @@ export const generateClientStatement = async (req, res) => {
 };
 
 // =========================================================================
-// 3. REPORTE GERENCIAL GLOBAL (Reemplazo de la hoja T. SERVICIOS del Excel)
+// 3. REPORTE GERENCIAL GLOBAL MEJORADO (Con Desglose para Excel)
 // =========================================================================
 export const getGlobalReport = async (req, res) => {
   try {
@@ -157,33 +156,110 @@ export const getGlobalReport = async (req, res) => {
     const startDate = new Date(anio, mes - 1, 1);
     const endDate = new Date(anio, mes, 0, 23, 59, 59);
 
-    // 1. Buscamos TODOS los turnos finalizados de la empresa en ese mes
+    // 1. Buscamos TODOS los turnos finalizados (Y popular nombres)
     const turnos = await Shift.find({
       fecha_servicio: { $gte: startDate, $lte: endDate },
       estado_turno: 'FINALIZADO'
-    });
+    })
+    .populate('empleada_id', 'nombre_completo cedula tipo_empleada')
+    .populate('cliente_id', 'nombre_responsable nombre_paciente');
 
+    // 2. Buscamos TODAS las novedades financieras (Y popular nombres)
+    const novedades = await PayrollAdjustment.find({
+      fecha_aplicacion: { $gte: startDate, $lte: endDate }
+    }).populate('empleada_id', 'nombre_completo cedula tipo_empleada');
+
+    // --- CÁLCULOS GLOBALES (KPIs del Dashboard) ---
     const ingresosBrutos = turnos.reduce((sum, t) => sum + t.precio_cobrado, 0);
     const nominaBase = turnos.reduce((sum, t) => sum + t.costo_pagado, 0);
 
-    // 2. Buscamos TODAS las novedades financieras de la empresa
-    const novedades = await PayrollAdjustment.find({
-      fecha_aplicacion: { $gte: startDate, $lte: endDate }
-    });
-
     let totalBonosPagados = 0;
     let totalPrestamosDescontados = 0;
-
     novedades.forEach(nov => {
       if (nov.tipo_movimiento === 'INGRESO') totalBonosPagados += nov.monto;
       if (nov.tipo_movimiento === 'EGRESO') totalPrestamosDescontados += nov.monto;
     });
 
-    // 3. Matemática de la Empresa
-    // Egresos reales = Nómina base de turnos + Bonos regalados - Préstamos recuperados
     const egresosNetos = (nominaBase + totalBonosPagados) - totalPrestamosDescontados;
     const utilidadBruta = ingresosBrutos - egresosNetos;
 
+
+    // --- DESGLOSE PARA EXCEL: NÓMINA EMPLEADAS ---
+    const nominaMap = {};
+    
+    // Primero, sumar los turnos de cada empleada
+    turnos.forEach(t => {
+      if (!t.empleada_id) return; // Por si hay datos corruptos
+      const empId = t.empleada_id._id.toString();
+      
+      if (!nominaMap[empId]) {
+        nominaMap[empId] = {
+          nombre: t.empleada_id.nombre_completo,
+          cedula: t.empleada_id.cedula || 'N/A',
+          rol_fijo: t.empleada_id.tipo_empleada,
+          cantidad_turnos: 0,
+          sueldo_base: 0,
+          bonificaciones: 0,
+          prestamos: 0,
+          total_a_pagar: 0
+        };
+      }
+      nominaMap[empId].cantidad_turnos += 1;
+      nominaMap[empId].sueldo_base += t.costo_pagado;
+    });
+
+    // Segundo, aplicar las novedades (bonos y préstamos) a cada empleada
+    novedades.forEach(nov => {
+      if (!nov.empleada_id) return;
+      const empId = nov.empleada_id._id.toString();
+
+      // Si la empleada tuvo un bono pero no hizo turnos este mes, la creamos en la lista
+      if (!nominaMap[empId]) {
+        nominaMap[empId] = {
+          nombre: nov.empleada_id.nombre_completo,
+          cedula: nov.empleada_id.cedula || 'N/A',
+          rol_fijo: nov.empleada_id.tipo_empleada,
+          cantidad_turnos: 0,
+          sueldo_base: 0,
+          bonificaciones: 0,
+          prestamos: 0,
+          total_a_pagar: 0
+        };
+      }
+
+      if (nov.tipo_movimiento === 'INGRESO') nominaMap[empId].bonificaciones += nov.monto;
+      if (nov.tipo_movimiento === 'EGRESO') nominaMap[empId].prestamos += nov.monto;
+    });
+
+    // Calcular el total final por empleada
+    const detalleNomina = Object.values(nominaMap).map(emp => {
+      emp.total_a_pagar = (emp.sueldo_base + emp.bonificaciones) - emp.prestamos;
+      return emp;
+    });
+
+
+    // --- DESGLOSE PARA EXCEL: FACTURACIÓN CLIENTES ---
+    const clientesMap = {};
+
+    turnos.forEach(t => {
+      if (!t.cliente_id) return;
+      const cliId = t.cliente_id._id.toString();
+      
+      if (!clientesMap[cliId]) {
+        clientesMap[cliId] = {
+          responsable: t.cliente_id.nombre_responsable,
+          paciente: t.cliente_id.nombre_paciente,
+          cantidad_turnos: 0,
+          total_facturado_mes: 0
+        };
+      }
+      clientesMap[cliId].cantidad_turnos += 1;
+      clientesMap[cliId].total_facturado_mes += t.precio_cobrado;
+    });
+
+    const detalleClientes = Object.values(clientesMap);
+
+    // --- RESPUESTA FINAL AL FRONTEND ---
     res.status(200).json({
       success: true,
       data: {
@@ -191,7 +267,9 @@ export const getGlobalReport = async (req, res) => {
         total_turnos_operados: turnos.length,
         ingresos_brutos: ingresosBrutos,
         egresos_nomina: egresosNetos,
-        utilidad_bruta: utilidadBruta
+        utilidad_bruta: utilidadBruta,
+        detalle_nomina: detalleNomina,       // LISTO PARA EL EXCEL
+        detalle_clientes: detalleClientes    // LISTO PARA EL EXCEL
       }
     });
 
