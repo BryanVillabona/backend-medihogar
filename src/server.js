@@ -34,8 +34,6 @@ const crearAdminPorDefecto = async () => {
 
       await adminDefecto.save();
       console.log('✅ Super Administrador creado con éxito.');
-      console.log('   📧 Correo: admin@medihogar.com');
-      console.log('   🔑 Contraseña: admin123');
       console.log('   ⚠️ ¡Recuerda cambiar esta contraseña desde el panel de seguridad una vez ingreses!');
     }
   } catch (error) {
