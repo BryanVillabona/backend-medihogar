@@ -62,8 +62,8 @@ export const resetUserPassword = async (req, res) => {
     const { id } = req.params;
     const { newPassword } = req.body;
 
-    if (!newPassword || newPassword.length < 6) {
-      return res.status(400).json({ success: false, message: 'La contraseña debe tener al menos 6 caracteres' });
+    if (!newPassword || newPassword.length < 8) {
+      return res.status(400).json({ success: false, message: 'La contraseña debe tener al menos 8 caracteres' });
     }
 
     // 1. Buscar al usuario que se quiere modificar antes de hacer ningún cambio
