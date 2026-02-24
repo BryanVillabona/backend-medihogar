@@ -14,8 +14,27 @@ import authRoutes from './modules/auth/auth.routes.js';
 
 const app = express();
 
+// 👇 NUEVO: ESCUDO CORS (Lista Blanca de Dominios) 👇
+const dominiosPermitidos = [
+  'https://frontend-medihogar.vercel.app', // Tu sitio en producción
+  'http://localhost:5173'                  // Tu computadora local para pruebas
+];
+
 app.use(helmet()); 
-app.use(cors()); 
+app.use(cors({
+  origin: function (origin, callback) {
+    // Si no hay origen (como un script de servidor local) o si está en la lista blanca, lo dejamos pasar
+    if (!origin || dominiosPermitidos.includes(origin)) {
+      callback(null, true);
+    } else {
+      // Si otra página web intenta consumir tu API, la bloqueamos
+      callback(new Error('Bloqueado por CORS: Dominio no autorizado'));
+    }
+  },
+  credentials: true
+})); 
+// 👆 ============================================== 👆
+
 app.use(express.json()); 
 app.use(morgan('dev')); 
 

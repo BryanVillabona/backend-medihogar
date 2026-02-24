@@ -1,7 +1,8 @@
 import jwt from 'jsonwebtoken';
+import User from '../../modules/users/user.model.js'; // <-- NUEVO: Importamos el modelo de Usuario
 
-// 1. Guardián General (Verifica si estás logueado)
-export const verifyToken = (req, res, next) => {
+// 1. Guardián General (Verifica si estás logueado y ACTIVO)
+export const verifyToken = async (req, res, next) => { // <-- CAMBIO: Ahora es async
   try {
     let token = req.headers.authorization;
 
@@ -12,7 +13,23 @@ export const verifyToken = (req, res, next) => {
 
     token = token.split(' ')[1];
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    req.user = decoded;
+    
+    // 👇 NUEVO ESCUDO: VERIFICAR SI LA EMPLEADA FUE DESPEDIDA/INACTIVADA 👇
+    const user = await User.findById(decoded.id);
+    
+    if (!user) {
+      return res.status(401).json({ success: false, message: 'El usuario ya no existe en el sistema' });
+    }
+    
+    if (user.estado_activa === false) {
+      return res.status(403).json({ 
+        success: false, 
+        message: 'Acceso revocado por el administrador. Su cuenta está inactiva.' 
+      });
+    }
+    // 👆 ============================================================== 👆
+
+    req.user = decoded; 
     
     next();
   } catch (error) {
