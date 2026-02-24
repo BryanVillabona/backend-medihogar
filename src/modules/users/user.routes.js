@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { createUser, getUsers, updateUser } from './user.controller.js';
 import { resetUserPassword } from './user.controller.js';
-import { verifyToken, verifyAdmin, checkRole } from '../../core/middlewares/auth.middleware.js';
+import { verifyToken, verifyAdmin } from '../../core/middlewares/auth.middleware.js';
 import { validateSchema } from '../../core/middlewares/validate.middleware.js';
 import { createUserSchema } from './user.schema.js';
 
@@ -15,6 +15,6 @@ router.get('/', verifyToken, verifyAdmin, getUsers);
 
 router.put('/:id/reset-password', verifyToken, verifyAdmin, resetUserPassword);
 
-router.put('/:id', verifyToken, checkRole(['ADMIN']), updateUser);
+router.put('/:id', verifyToken, verifyAdmin, updateUser);
 
 export default router;
