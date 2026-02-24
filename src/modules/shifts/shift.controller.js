@@ -5,7 +5,6 @@ import Client from '../clients/client.model.js';
 
 export const createShift = async (req, res) => {
   try {
-    // NUEVO: Recibimos rol_ejercido y opcionalmente precios custom
     const { 
       cliente_id, empleada_id, fecha_servicio, jornada, duracion_horas, 
       novedades, rol_ejercido, precio_cobrado_custom, costo_pagado_custom 
@@ -16,7 +15,7 @@ export const createShift = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Empleada no encontrada' });
     }
 
-    // 1. Buscar tarifa base en el Catálogo usando el rol_ejercido (no el contrato fijo)
+    // 1. Buscar tarifa base en el Catálogo usando el rol_ejercido
     const tarifa = await Catalog.findOne({
       rol_requerido: rol_ejercido,
       duracion_horas: duracion_horas,
@@ -31,7 +30,6 @@ export const createShift = async (req, res) => {
     }
 
     // 2. Lógica de Sobreescritura (Custom Pricing)
-    // Si mandan un precio por req.body, manda ese; si no, usa el del catálogo
     const precioFinalCliente = precio_cobrado_custom || tarifa.precio_cobrado_cliente;
     const costoFinalEmpleada = costo_pagado_custom || tarifa.costo_pagado_empleada;
 
@@ -50,8 +48,10 @@ export const createShift = async (req, res) => {
 
     const turnoGuardado = await nuevoTurno.save();
 
-    // ⚠️ ATENCIÓN: Ya NO sumamos el saldo_pendiente aquí. 
-    // Un turno programado no es una deuda real hasta que se ejecuta.
+    // 📢 --- NUEVO: AVISAR AL FRONTEND QUE HAY UN TURNO NUEVO ---
+    const io = req.app.get('io');
+    if (io) io.emit('refresh_shifts', { mensaje: 'Nuevo turno programado' });
+    // ------------------------------------------------------------
 
     res.status(201).json({
       success: true,
@@ -83,6 +83,11 @@ export const completeShift = async (req, res) => {
       $inc: { saldo_pendiente: shift.precio_cobrado }
     });
 
+    // 📢 --- NUEVO: AVISAR AL FRONTEND QUE UN TURNO SE FINALIZÓ ---
+    const io = req.app.get('io');
+    if (io) io.emit('refresh_shifts', { mensaje: 'Un turno ha sido finalizado' });
+    // -------------------------------------------------------------
+
     res.status(200).json({
       success: true,
       message: 'Turno finalizado. Cartera del cliente actualizada.',
@@ -96,8 +101,6 @@ export const completeShift = async (req, res) => {
 // Obtener los turnos (Podemos filtrarlos luego, por ahora traemos todos)
 export const getShifts = async (req, res) => {
   try {
-    // req.user viene de tu middleware verifyToken
-    // CORRECCIÓN: Usamos req.user.rol en vez de rol_sistema para que coincida con tu JWT
     const filtro = req.user.rol === 'ADMIN' ? {} : { empleada_id: req.user._id || req.user.id };
 
     const turnos = await Shift.find(filtro)
@@ -119,7 +122,7 @@ export const cancelShift = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Turno no encontrado' });
     }
 
-    // Validaciones de negocio usando tu modelo
+    // Validaciones de negocio
     if (shift.estado_turno === 'CANCELADO') {
       return res.status(400).json({ success: false, message: 'El turno ya se encuentra cancelado' });
     }
@@ -127,7 +130,7 @@ export const cancelShift = async (req, res) => {
       return res.status(400).json({ success: false, message: 'No se puede cancelar un turno que ya finalizó' });
     }
 
-    // Cambiamos el estado usando tu campo
+    // Cambiamos el estado
     shift.estado_turno = 'CANCELADO';
     await shift.save();
 
@@ -135,6 +138,11 @@ export const cancelShift = async (req, res) => {
     await Client.findByIdAndUpdate(shift.cliente_id, {
       $inc: { saldo_pendiente: -shift.precio_cobrado }
     });
+
+    // 📢 --- NUEVO: AVISAR AL FRONTEND QUE SE CANCELÓ UN TURNO ---
+    const io = req.app.get('io');
+    if (io) io.emit('refresh_shifts', { mensaje: 'Un turno ha sido cancelado' });
+    // -------------------------------------------------------------
 
     res.status(200).json({
       success: true,
@@ -150,11 +158,10 @@ export const cancelShift = async (req, res) => {
   }
 };
 
-// Agregar en shift.controller.js
 export const updateShift = async (req, res) => {
   try {
     const { id } = req.params;
-    const actualizaciones = req.body; // Puede traer fecha, precios custom, rol, etc.
+    const actualizaciones = req.body; 
 
     const turno = await Shift.findById(id);
 
@@ -174,8 +181,13 @@ export const updateShift = async (req, res) => {
     const turnoActualizado = await Shift.findByIdAndUpdate(
       id,
       { $set: actualizaciones },
-      { new: true, runValidators: true } // runValidators asegura que sigan respetando los Enums
+      { new: true, runValidators: true }
     );
+
+    // 📢 --- NUEVO: AVISAR AL FRONTEND QUE SE ACTUALIZÓ UN TURNO ---
+    const io = req.app.get('io');
+    if (io) io.emit('refresh_shifts', { mensaje: 'Un turno ha sido modificado' });
+    // --------------------------------------------------------------
 
     res.status(200).json({
       success: true,
