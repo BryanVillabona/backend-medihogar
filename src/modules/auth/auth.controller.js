@@ -12,6 +12,13 @@ export const login = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Credenciales inválidas' });
     }
 
+    if (user.estado === false) {
+      return res.status(403).json({ 
+        success: false, 
+        message: 'Acceso denegado. Este usuario se encuentra inactivo en el sistema.' 
+      });
+    }
+
     // 2. Verificar la contraseña encriptada
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) {
