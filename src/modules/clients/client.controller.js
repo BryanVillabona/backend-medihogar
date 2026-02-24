@@ -39,3 +39,24 @@ export const getActiveClients = async (req, res) => {
     });
   }
 };
+
+export const updateClient = async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    // El {new: true} es para que MongoDB nos devuelva el dato ya actualizado
+    const clienteActualizado = await Client.findByIdAndUpdate(id, req.body, { new: true, runValidators: true });
+    
+    if (!clienteActualizado) {
+      return res.status(404).json({ success: false, message: 'Cliente no encontrado' });
+    }
+    
+    res.status(200).json({ 
+      success: true, 
+      message: 'Cliente actualizado correctamente',
+      data: clienteActualizado 
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Error al actualizar cliente', error: error.message });
+  }
+};

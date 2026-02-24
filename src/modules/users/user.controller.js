@@ -98,3 +98,28 @@ export const resetUserPassword = async (req, res) => {
     res.status(500).json({ success: false, message: 'Error al cambiar contraseña', error: error.message });
   }
 };
+
+export const updateUser = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const updateData = { ...req.body };
+
+    // Por seguridad, si alguien intenta enviar una contraseña por aquí, la ignoramos.
+    // (Para eso está tu función dedicada de resetPassword que ya creamos)
+    delete updateData.password;
+
+    const userActualizado = await User.findByIdAndUpdate(id, updateData, { new: true, runValidators: true });
+    
+    if (!userActualizado) {
+      return res.status(404).json({ success: false, message: 'Usuario no encontrado' });
+    }
+
+    res.status(200).json({ 
+      success: true, 
+      message: 'Usuario actualizado correctamente',
+      data: userActualizado 
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Error al actualizar usuario', error: error.message });
+  }
+};
