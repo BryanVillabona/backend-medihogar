@@ -16,7 +16,7 @@ const app = express();
 
 // 👇 NUEVO: ESCUDO CORS (Lista Blanca de Dominios) 👇
 const dominiosPermitidos = [
-  'https://frontend-medihogar.vercel.app', // Tu sitio en producción
+  'https://serviciosclinihogar.vercel.app', // Tu sitio en producción
   'http://localhost:5173'                  // Tu computadora local para pruebas
 ];
 

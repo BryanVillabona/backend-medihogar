@@ -17,7 +17,7 @@ const server = http.createServer(app); // Envolvemos la app de Express en un ser
 
 // 👇 NUEVO: ESCUDO CORS PARA WEBSOCKETS 👇
 const dominiosPermitidos = [
-  'https://frontend-medihogar.vercel.app',
+  'https://serviciosclinihogar.vercel.app',
   'http://localhost:5173'
 ];
 
