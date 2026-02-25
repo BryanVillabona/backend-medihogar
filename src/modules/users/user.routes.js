@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { createUser, getUsers, updateUser } from './user.controller.js';
 import { resetUserPassword } from './user.controller.js';
-import { verifyToken, verifyAdmin } from '../../core/middlewares/auth.middleware.js';
+import { verifyToken, verifyAdmin, isSelfOrAdmin } from '../../core/middlewares/auth.middleware.js';
 import { validateSchema } from '../../core/middlewares/validate.middleware.js';
 import { createUserSchema } from './user.schema.js';
 
@@ -13,8 +13,10 @@ router.post('/', verifyToken, verifyAdmin, validateSchema(createUserSchema), cre
 // Solo listamos usuarios si estás logueado y eres ADMIN (las empleadas no necesitan ver la lista de personal)
 router.get('/', verifyToken, verifyAdmin, getUsers);
 
-router.put('/:id/reset-password', verifyToken, verifyAdmin, resetUserPassword);
+// 👇 AQUÍ USAMOS EL NUEVO GUARDIÁN 👇
+router.put('/:id/reset-password', verifyToken, isSelfOrAdmin, resetUserPassword);
 
-router.put('/:id', verifyToken, verifyAdmin, updateUser);
+// 👇 Y AQUÍ TAMBIÉN 👇
+router.put('/:id', verifyToken, isSelfOrAdmin, updateUser);
 
 export default router;

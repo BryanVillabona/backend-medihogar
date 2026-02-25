@@ -98,16 +98,29 @@ export const resetUserPassword = async (req, res) => {
 export const updateUser = async (req, res) => {
   try {
     const { id } = req.params;
-    const updateData = { ...req.body };
+    let updateData = { ...req.body };
 
     delete updateData.password;
 
-    // 👇 MAPEO para cuando edites a una empleada
+    // 👇 ESCUDO DE SEGURIDAD PARA AUTO-EDICIÓN 👇
+    // Si el usuario que hace la petición NO es ADMIN, le bloqueamos los campos críticos
+    const userRole = req.user?.rol_sistema || req.user?.rol;
+    
+    if (userRole !== 'ADMIN') {
+      delete updateData.rol_sistema;
+      delete updateData.tipo_empleada;
+      delete updateData.estado;
+      delete updateData.estado_activa;
+      delete updateData.cedula; // La cédula no se cambia sola
+    }
+    // 👆 ========================================== 👆
+
+    // 👇 MAPEO para cuando edites a una empleada (solo si 'estado' superó el escudo anterior)
     if (updateData.estado !== undefined) {
       updateData.estado_activa = updateData.estado;
     }
 
-    const userActualizado = await User.findByIdAndUpdate(id, updateData, { new: true, runValidators: true });
+    const userActualizado = await User.findByIdAndUpdate(id, updateData, { new: true, runValidators: true }).select('-password');
     
     if (!userActualizado) {
       return res.status(404).json({ success: false, message: 'Usuario no encontrado' });

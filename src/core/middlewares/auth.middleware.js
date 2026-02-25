@@ -52,3 +52,22 @@ export const verifyAdmin = (req, res, next) => {
 
   next(); // Si es ADMIN, lo dejamos pasar
 };
+
+// 👇 NUEVO GUARDIA: Permite el paso si es ADMIN o si es el dueño de la cuenta 👇
+export const isSelfOrAdmin = (req, res, next) => {
+  try {
+    const targetId = req.params.id; // El ID del usuario que se va a editar (viene en la URL)
+    const userId = req.user.id || req.user._id; // El ID del usuario que está logueado
+    const userRole = req.user.rol_sistema || req.user.rol; // El rol del usuario logueado
+
+    // Si es ADMIN o si el ID logueado coincide con el ID que se quiere editar, lo dejamos pasar
+    if (userRole === 'ADMIN' || String(userId) === String(targetId)) {
+      next();
+    } else {
+      return res.status(403).json({ message: 'Acceso denegado. Solo puedes modificar tu propia cuenta.' });
+    }
+  } catch (error) {
+    return res.status(500).json({ message: 'Error de autorización en el servidor.' });
+  }
+};
+// 👆 ========================================================================= 👆
