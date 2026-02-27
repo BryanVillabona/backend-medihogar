@@ -99,13 +99,27 @@ export const completeShift = async (req, res) => {
 };
 
 // Obtener los turnos (Podemos filtrarlos luego, por ahora traemos todos)
+// Obtener los turnos (Ahora con filtros de fecha para optimizar el frontend)
 export const getShifts = async (req, res) => {
   try {
+    const { startDate, endDate } = req.query;
+    
+    // 1. Filtro base de seguridad (Admin ve todo, empleada ve lo suyo)
     const filtro = req.user.rol === 'ADMIN' ? {} : { empleada_id: req.user._id || req.user.id };
 
+    // 2. Si el frontend envía fechas, agregamos el filtro de rango de tiempo
+    if (startDate && endDate) {
+      filtro.fecha_servicio = {
+        $gte: new Date(startDate), // Mayor o igual a la fecha de inicio
+        $lte: new Date(endDate)    // Menor o igual a la fecha de fin
+      };
+    }
+
+    // 3. Traemos los turnos ordenados por fecha (los más próximos primero)
     const turnos = await Shift.find(filtro)
       .populate('cliente_id', 'nombre_paciente nombre_responsable')
-      .populate('empleada_id', 'nombre_completo tipo_empleada');
+      .populate('empleada_id', 'nombre_completo tipo_empleada')
+      .sort({ fecha_servicio: 1 }); // 1 = Ascendente, -1 = Descendente
       
     res.status(200).json({ success: true, data: turnos });
   } catch (error) {
