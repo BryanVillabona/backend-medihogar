@@ -16,32 +16,33 @@ export const calculateEmployeePayroll = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Debe proveer startDate y endDate' });
     }
 
+    // 🛡️ BLINDAJE ZONA HORARIA COLOMBIA (UTC-5) 🛡️
+    const start = new Date(`${startDate}T00:00:00.000-05:00`);
+    const end = new Date(`${endDate}T23:59:59.999-05:00`);
+
     const empleada = await User.findById(empleadaId);
     if (!empleada) {
       return res.status(404).json({ success: false, message: 'Empleada no encontrada' });
     }
 
-    // A. Buscar turnos (SOLO LOS FINALIZADOS) y popular el nombre del cliente
     const turnos = await Shift.find({
       empleada_id: empleadaId,
       estado_turno: 'FINALIZADO',
       fecha_servicio: {
-        $gte: new Date(startDate),
-        $lte: new Date(endDate)
+        $gte: start,
+        $lte: end
       }
-    }).populate('cliente_id', 'nombre_paciente'); // <--- CORRECCIÓN: Traer el paciente
+    }).populate('cliente_id', 'nombre_paciente');
 
-    // B. Buscar novedades
     const novedades = await PayrollAdjustment.find({
       empleada_id: empleadaId,
       estado: 'PENDIENTE',
       fecha_aplicacion: {
-        $gte: new Date(startDate),
-        $lte: new Date(endDate)
+        $gte: start,
+        $lte: end
       }
     });
 
-    // C. Cálculos
     const totalGanadoTurnos = turnos.reduce((acumulador, turno) => acumulador + turno.costo_pagado, 0);
     
     let totalBonos = 0;
@@ -54,13 +55,12 @@ export const calculateEmployeePayroll = async (req, res) => {
 
     const netoPagar = (totalGanadoTurnos + totalBonos) - totalDeducciones;
 
-    // D. Devolver el reporte
     res.status(200).json({
       success: true,
       message: `Nómina calculada para ${empleada.nombre_completo}`,
       data: {
         empleada: empleada.nombre_completo,
-        cedula: empleada.cedula, // <--- CORRECCIÓN: Enviar la cédula
+        cedula: empleada.cedula,
         periodo: `${startDate} al ${endDate}`,
         resumen: {
           cantidad_turnos: turnos.length,
@@ -70,7 +70,7 @@ export const calculateEmployeePayroll = async (req, res) => {
           neto_a_pagar: netoPagar
         },
         detalle_turnos: turnos,
-        novedades: novedades // <--- CORRECCIÓN: Se llamaba detalle_novedades
+        novedades: novedades
       }
     });
 
@@ -91,45 +91,45 @@ export const generateClientStatement = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Debe proveer startDate y endDate' });
     }
 
-    // <--- CORRECCIÓN: Traer todos los datos del cliente
+    // 🛡️ BLINDAJE ZONA HORARIA COLOMBIA (UTC-5) 🛡️
+    const start = new Date(`${startDate}T00:00:00.000-05:00`);
+    const end = new Date(`${endDate}T23:59:59.999-05:00`);
+
     const cliente = await Client.findById(clienteId).select('nombre_responsable nombre_paciente saldo_pendiente documento_responsable telefono_contacto direccion_servicio');
     if (!cliente) return res.status(404).json({ success: false, message: 'Cliente no encontrado' });
 
-    // A. Obtener detalle de turnos
     const turnosDelMes = await Shift.find({
       cliente_id: clienteId,
       estado_turno: 'FINALIZADO',
       fecha_servicio: { 
-        $gte: new Date(startDate), 
-        $lte: new Date(endDate) 
+        $gte: start, 
+        $lte: end 
       }
     })
-    .populate('empleada_id', 'nombre_completo') // <--- CORRECCIÓN: Traer nombre de la empleada
+    .populate('empleada_id', 'nombre_completo')
     .select('fecha_servicio jornada duracion_horas precio_cobrado rol_ejercido empleada_id').sort('fecha_servicio');
 
     const totalFacturadoMes = turnosDelMes.reduce((sum, t) => sum + t.precio_cobrado, 0);
 
-    // B. Obtener pagos
     const pagosDelMes = await Payment.find({
       cliente_id: clienteId,
       fecha_pago: { 
-        $gte: new Date(startDate), 
-        $lte: new Date(endDate) 
+        $gte: start, 
+        $lte: end 
       }
     }).select('monto_pagado fecha_pago metodo_pago referencia');
 
     const totalPagadoMes = pagosDelMes.reduce((sum, p) => sum + p.monto_pagado, 0);
 
-    // C. Generar documento
     res.status(200).json({
       success: true,
       data: {
         cliente: {
           nombre: cliente.nombre_responsable,
           paciente: cliente.nombre_paciente,
-          documento: cliente.documento_responsable, // <--- NUEVO
-          telefono: cliente.telefono_contacto, // <--- NUEVO
-          direccion: cliente.direccion_servicio, // <--- NUEVO
+          documento: cliente.documento_responsable,
+          telefono: cliente.telefono_contacto,
+          direccion: cliente.direccion_servicio,
           saldo_historico_pendiente_total: cliente.saldo_pendiente
         },
         periodo_consultado: `${startDate} al ${endDate}`,
@@ -160,28 +160,31 @@ export const getGlobalReport = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Debe proveer mes y año' });
     }
 
-    const startDate = new Date(anio, mes - 1, 1);
-    const endDate = new Date(anio, mes, 0, 23, 59, 59);
+    // 🛡️ BLINDAJE ZONA HORARIA COLOMBIA (UTC-5) PARA MES EXACTO 🛡️
+    const mesStr = String(mes).padStart(2, '0');
+    // Día 1 del mes a las 00:00:00 hora Colombia
+    const startOfMonth = new Date(`${anio}-${mesStr}-01T00:00:00.000-05:00`);
+    
+    // Obtener el último día del mes dinámicamente (ej: 28, 30, 31)
+    const lastDay = new Date(anio, mes, 0).getDate();
+    // Último día del mes a las 23:59:59 hora Colombia
+    const endOfMonth = new Date(`${anio}-${mesStr}-${lastDay}T23:59:59.999-05:00`);
 
-    // 1. Buscamos TODOS los turnos finalizados
     const turnos = await Shift.find({
-      fecha_servicio: { $gte: startDate, $lte: endDate },
+      fecha_servicio: { $gte: startOfMonth, $lte: endOfMonth },
       estado_turno: 'FINALIZADO'
     })
     .populate('empleada_id', 'nombre_completo cedula tipo_empleada')
-    .populate('cliente_id', 'nombre_responsable nombre_paciente saldo_pendiente'); // <-- Traemos el saldo
+    .populate('cliente_id', 'nombre_responsable nombre_paciente saldo_pendiente'); 
 
-    // 2. Buscamos TODAS las novedades financieras
     const novedades = await PayrollAdjustment.find({
-      fecha_aplicacion: { $gte: startDate, $lte: endDate }
+      fecha_aplicacion: { $gte: startOfMonth, $lte: endOfMonth }
     }).populate('empleada_id', 'nombre_completo cedula tipo_empleada');
 
-    // 3. Buscamos TODOS los pagos (abonos) del mes
     const pagos = await Payment.find({
-      fecha_pago: { $gte: startDate, $lte: endDate }
+      fecha_pago: { $gte: startOfMonth, $lte: endOfMonth }
     }).populate('cliente_id', 'nombre_responsable nombre_paciente saldo_pendiente');
 
-    // --- CÁLCULOS GLOBALES (KPIs del Dashboard) ---
     const ingresosBrutos = turnos.reduce((sum, t) => sum + t.precio_cobrado, 0);
     const nominaBase = turnos.reduce((sum, t) => sum + t.costo_pagado, 0);
 
@@ -195,7 +198,6 @@ export const getGlobalReport = async (req, res) => {
     const egresosNetos = (nominaBase + totalBonosPagados) - totalPrestamosDescontados;
     const utilidadBruta = ingresosBrutos - egresosNetos;
 
-    // --- DESGLOSE PARA EXCEL: NÓMINA EMPLEADAS ---
     const nominaMap = {};
     turnos.forEach(t => {
       if (!t.empleada_id) return;
@@ -222,10 +224,7 @@ export const getGlobalReport = async (req, res) => {
       return emp;
     });
 
-    // --- DESGLOSE PARA EXCEL: FACTURACIÓN CLIENTES ---
     const clientesMap = {};
-
-    // A. Sumamos los cargos por turnos
     turnos.forEach(t => {
       if (!t.cliente_id) return;
       const cliId = t.cliente_id._id.toString();
@@ -234,17 +233,16 @@ export const getGlobalReport = async (req, res) => {
         clientesMap[cliId] = {
           responsable: t.cliente_id.nombre_responsable,
           paciente: t.cliente_id.nombre_paciente,
-          saldo_actual: t.cliente_id.saldo_pendiente, // <-- Saldo real
+          saldo_actual: t.cliente_id.saldo_pendiente, 
           cantidad_turnos: 0,
           total_facturado_mes: 0,
-          abonos_mes: 0 // <-- Nueva métrica
+          abonos_mes: 0
         };
       }
       clientesMap[cliId].cantidad_turnos += 1;
       clientesMap[cliId].total_facturado_mes += t.precio_cobrado;
     });
 
-    // B. Sumamos los abonos recibidos
     pagos.forEach(p => {
       if (!p.cliente_id) return;
       const cliId = p.cliente_id._id.toString();
@@ -264,14 +262,13 @@ export const getGlobalReport = async (req, res) => {
 
     const detalleClientes = Object.values(clientesMap);
 
-    // --- RESPUESTA FINAL AL FRONTEND ---
     res.status(200).json({
       success: true,
       data: {
-        periodo: `${mes}-${anio}`,
+        periodo: `${mesStr}-${anio}`,
         total_turnos_operados: turnos.length,
-        ingresos_brutos: ingresosBrutos,
-        egresos_nomina: egresosNetos,
+        total_facturado_clientes: ingresosBrutos,
+        total_costo_empleadas: egresosNetos,
         utilidad_bruta: utilidadBruta,
         detalle_nomina: detalleNomina,
         detalle_clientes: detalleClientes
