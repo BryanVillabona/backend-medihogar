@@ -32,7 +32,7 @@ export const calculateEmployeePayroll = async (req, res) => {
         $gte: start,
         $lte: end
       }
-    }).populate('cliente_id', 'nombre_paciente');
+    }).populate('cliente_id', 'nombre_paciente').sort('fecha_servicio');
 
     const novedades = await PayrollAdjustment.find({
       empleada_id: empleadaId,
@@ -41,7 +41,7 @@ export const calculateEmployeePayroll = async (req, res) => {
         $gte: start,
         $lte: end
       }
-    });
+    }).sort('fecha_aplicacion');
 
     const totalGanadoTurnos = turnos.reduce((acumulador, turno) => acumulador + turno.costo_pagado, 0);
     
