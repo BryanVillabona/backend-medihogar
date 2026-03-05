@@ -6,6 +6,11 @@ const shiftSchema = new Schema({
     ref: 'Client',
     required: true
   },
+  // 👇 NUEVO: Fundamental para saber a cuál paciente del responsable se va a visitar
+  paciente_id: {
+    type: Schema.Types.ObjectId,
+    required: true
+  },
   empleada_id: {
     type: Schema.Types.ObjectId,
     ref: 'User',

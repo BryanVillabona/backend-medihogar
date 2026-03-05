@@ -6,7 +6,7 @@ import Client from '../clients/client.model.js';
 export const createShift = async (req, res) => {
   try {
     const { 
-      cliente_id, empleada_id, fecha_servicio, jornada, duracion_horas, 
+      cliente_id, paciente_id, empleada_id, fecha_servicio, jornada, duracion_horas, 
       novedades, rol_ejercido, precio_cobrado_custom, costo_pagado_custom 
     } = req.body;
 
@@ -36,6 +36,7 @@ export const createShift = async (req, res) => {
     // 3. Crear el turno (Estado por defecto: PROGRAMADO)
     const nuevoTurno = new Shift({
       cliente_id,
+      paciente_id, // <-- AÑADIDO: Guardamos a cuál paciente va a visitar
       empleada_id,
       fecha_servicio,
       jornada,
@@ -98,7 +99,6 @@ export const completeShift = async (req, res) => {
   }
 };
 
-// Obtener los turnos (Podemos filtrarlos luego, por ahora traemos todos)
 // Obtener los turnos (Ahora con filtros de fecha para optimizar el frontend)
 export const getShifts = async (req, res) => {
   try {
@@ -117,11 +117,37 @@ export const getShifts = async (req, res) => {
 
     // 3. Traemos los turnos ordenados por fecha
     const turnos = await Shift.find(filtro)
-      .populate('cliente_id', 'nombre_paciente nombre_responsable direccion_servicio') // <--- AÑADIDO AQUÍ
+      // 👇 MODIFICADO: Traemos el arreglo de pacientes para buscar el específico
+      .populate('cliente_id', 'nombre_responsable pacientes') 
       .populate('empleada_id', 'nombre_completo tipo_empleada')
       .sort({ fecha_servicio: 1 });
       
-    res.status(200).json({ success: true, data: turnos });
+    // 4. MÁGIA DE TRANSFORMACIÓN: Buscamos el paciente correcto y lo exponemos como el frontend espera
+    const turnosFormateados = turnos.map(turno => {
+      const turnoObj = turno.toObject();
+
+      if (turnoObj.cliente_id && turnoObj.cliente_id.pacientes) {
+        // Buscamos cuál paciente coincide con el paciente_id del turno
+        const pacienteEspecifico = turnoObj.cliente_id.pacientes.find(
+          p => p._id.toString() === turnoObj.paciente_id.toString()
+        );
+
+        if (pacienteEspecifico) {
+          turnoObj.cliente_id.nombre_paciente = pacienteEspecifico.nombre_paciente;
+          turnoObj.cliente_id.direccion_servicio = pacienteEspecifico.direccion_servicio;
+        } else {
+          turnoObj.cliente_id.nombre_paciente = 'Paciente Inactivo/Eliminado';
+          turnoObj.cliente_id.direccion_servicio = 'Sin dirección';
+        }
+
+        // Borramos el arreglo completo para no enviar datos innecesarios al frontend
+        delete turnoObj.cliente_id.pacientes;
+      }
+
+      return turnoObj;
+    });
+
+    res.status(200).json({ success: true, data: turnosFormateados });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Error al obtener turnos', error: error.message });
   }
