@@ -115,11 +115,11 @@ export const getShifts = async (req, res) => {
       };
     }
 
-    // 3. Traemos los turnos ordenados por fecha (los más próximos primero)
+    // 3. Traemos los turnos ordenados por fecha
     const turnos = await Shift.find(filtro)
-      .populate('cliente_id', 'nombre_paciente nombre_responsable')
+      .populate('cliente_id', 'nombre_paciente nombre_responsable direccion_servicio') // <--- AÑADIDO AQUÍ
       .populate('empleada_id', 'nombre_completo tipo_empleada')
-      .sort({ fecha_servicio: 1 }); // 1 = Ascendente, -1 = Descendente
+      .sort({ fecha_servicio: 1 });
       
     res.status(200).json({ success: true, data: turnos });
   } catch (error) {
