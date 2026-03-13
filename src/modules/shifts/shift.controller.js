@@ -25,7 +25,7 @@ export const createShift = async (req, res) => {
     if (!tarifa && (!precio_cobrado_custom || !costo_pagado_custom)) {
       return res.status(400).json({ 
         success: false, 
-        message: `No existe tarifa en catálogo para ${rol_ejercido} de ${duracion_horas}h. Debe enviar precios manuales.` 
+        message: `No existe tarifa base para duración de ${duracion_horas}h. Debe ingresar los precios manualmente.` 
       });
     }
 
@@ -33,10 +33,10 @@ export const createShift = async (req, res) => {
     const precioFinalCliente = precio_cobrado_custom || tarifa.precio_cobrado_cliente;
     const costoFinalEmpleada = costo_pagado_custom || tarifa.costo_pagado_empleada;
 
-    // 3. Crear el turno (Estado por defecto: PROGRAMADO)
+    // 3. Crear el turno (Estado por defecto: PROGRAMADO, estado_pago_empleada: PENDIENTE)
     const nuevoTurno = new Shift({
       cliente_id,
-      paciente_id, // <-- AÑADIDO: Guardamos a cuál paciente va a visitar
+      paciente_id,
       empleada_id,
       fecha_servicio,
       jornada,
@@ -44,19 +44,21 @@ export const createShift = async (req, res) => {
       rol_ejercido,
       precio_cobrado: precioFinalCliente,
       costo_pagado: costoFinalEmpleada,
+      estado_pago_empleada: 'PENDIENTE', // Forzamos explícitamente el estado
       novedades
     });
 
     const turnoGuardado = await nuevoTurno.save();
 
-    // 📢 --- NUEVO: AVISAR AL FRONTEND QUE HAY UN TURNO NUEVO ---
+    // 📢 --- NOTIFICACIONES AISLADAS ---
     const io = req.app.get('io');
     if (io) {
       io.to('room_admins').to(`room_empleada_${empleada_id}`).emit('refresh_shifts', { 
-        mensaje: 'Nuevo turno programado' 
+        mensaje: 'Nuevo turno programado',
+        empleada_id: empleada_id // ENVIAMOS EL ID PARA QUE EL FRONTEND FILTRE EL SONIDO
       });
     }
-    // ------------------------------------------------------------
+    // -----------------------------------
 
     res.status(201).json({
       success: true,
@@ -72,8 +74,6 @@ export const createShift = async (req, res) => {
 export const completeShift = async (req, res) => {
   try {
     const { id } = req.params;
-    // 👇 NUEVO: Recibimos si la señora mayor ya le pagó a la empleada
-    const { pago_empleada_realizado } = req.body; 
 
     const shift = await Shift.findById(id);
 
@@ -82,24 +82,25 @@ export const completeShift = async (req, res) => {
       return res.status(400).json({ success: false, message: 'El turno ya estaba finalizado' });
     }
 
-    // 1. Cambiar estado y guardar si se le pagó a la empleada
+    // 1. Cambiar estado a FINALIZADO. 
+    // OJO: Ya no tocamos el pago de la empleada aquí. Eso se hará en otro endpoint.
     shift.estado_turno = 'FINALIZADO';
-    shift.pago_empleada_realizado = pago_empleada_realizado || false;
     await shift.save();
 
-    // 2. AHORA SÍ afectamos la cartera del cliente
+    // 2. Afectamos la cartera del cliente (Esto se mantiene igual, la deuda del cliente sube)
     await Client.findByIdAndUpdate(shift.cliente_id, {
       $inc: { saldo_pendiente: shift.precio_cobrado }
     });
 
-    // 📢 --- NUEVO: AVISAR SOLO A LOS ADMINS Y A LA EMPLEADA INVOLUCRADA ---
+    // 📢 --- NOTIFICACIONES AISLADAS ---
     const io = req.app.get('io');
     if (io) {
       io.to('room_admins').to(`room_empleada_${shift.empleada_id.toString()}`).emit('refresh_shifts', { 
-        mensaje: 'Un turno ha sido finalizado' 
+        mensaje: 'Un turno ha sido finalizado',
+        empleada_id: shift.empleada_id.toString() // ENVIAMOS EL ID PARA QUE EL FRONTEND FILTRE EL SONIDO
       });
     }
-    // -------------------------------------------------------------
+    // -----------------------------------
 
     res.status(200).json({
       success: true,
@@ -111,7 +112,6 @@ export const completeShift = async (req, res) => {
   }
 };
 
-// Obtener los turnos (Ahora con filtros de fecha para optimizar el frontend)
 export const getShifts = async (req, res) => {
   try {
     const { startDate, endDate } = req.query;
@@ -129,12 +129,11 @@ export const getShifts = async (req, res) => {
 
     // 3. Traemos los turnos ordenados por fecha
     const turnos = await Shift.find(filtro)
-      // 👇 MODIFICADO: Traemos el arreglo de pacientes para buscar el específico
       .populate('cliente_id', 'nombre_responsable pacientes') 
       .populate('empleada_id', 'nombre_completo tipo_empleada')
       .sort({ fecha_servicio: 1 });
       
-    // 4. MÁGIA DE TRANSFORMACIÓN: Buscamos el paciente correcto y lo exponemos como el frontend espera
+    // 4. MÁGIA DE TRANSFORMACIÓN: Buscamos el paciente correcto y lo exponemos
     const turnosFormateados = turnos.map(turno => {
       const turnoObj = turno.toObject();
 
@@ -191,14 +190,15 @@ export const cancelShift = async (req, res) => {
       $inc: { saldo_pendiente: -shift.precio_cobrado }
     });
 
-    // 📢 --- NUEVO: AVISAR AL FRONTEND QUE SE CANCELÓ UN TURNO ---
+    // 📢 --- NOTIFICACIONES AISLADAS ---
     const io = req.app.get('io');
     if (io) {
       io.to('room_admins').to(`room_empleada_${shift.empleada_id.toString()}`).emit('refresh_shifts', { 
-        mensaje: 'Un turno ha sido cancelado' 
+        mensaje: 'Un turno ha sido cancelado',
+        empleada_id: shift.empleada_id.toString()
       });
     }
-    // -------------------------------------------------------------
+    // -----------------------------------
 
     res.status(200).json({
       success: true,
@@ -240,14 +240,15 @@ export const updateShift = async (req, res) => {
       { new: true, runValidators: true }
     );
 
-    // 📢 --- NUEVO: AVISAR AL FRONTEND QUE SE ACTUALIZÓ UN TURNO ---
+    // 📢 --- NOTIFICACIONES AISLADAS ---
     const io = req.app.get('io');
     if (io) {
       io.to('room_admins').to(`room_empleada_${turnoActualizado.empleada_id.toString()}`).emit('refresh_shifts', { 
-        mensaje: 'Un turno ha sido modificado' 
+        mensaje: 'Un turno ha sido modificado',
+        empleada_id: turnoActualizado.empleada_id.toString()
       });
     }
-    // --------------------------------------------------------------
+    // -----------------------------------
 
     res.status(200).json({
       success: true,

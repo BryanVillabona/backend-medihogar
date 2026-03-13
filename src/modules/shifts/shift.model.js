@@ -6,7 +6,6 @@ const shiftSchema = new Schema({
     ref: 'Client',
     required: true
   },
-  // 👇 NUEVO: Fundamental para saber a cuál paciente del responsable se va a visitar
   paciente_id: {
     type: Schema.Types.ObjectId,
     required: true
@@ -27,9 +26,8 @@ const shiftSchema = new Schema({
   },
   duracion_horas: {
     type: Number,
-    required: true // Ej. 10 o 12
+    required: true // Ahora aceptará 1, 2, 3... cualquier duración.
   },
-  // NUEVO: Fundamental para personal flotante (Turnadoras)
   rol_ejercido: {
     type: String,
     enum: ['AUXILIAR', 'CUIDADORA'],
@@ -44,9 +42,11 @@ const shiftSchema = new Schema({
     type: Number,
     required: true
   },
-  pago_empleada_realizado: {
-    type: Boolean,
-    default: false
+  // 👇 CAMBIO CLAVE: Reemplazamos el booleano por un Estado de Pago 👇
+  estado_pago_empleada: {
+    type: String,
+    enum: ['PENDIENTE', 'PAGADO'],
+    default: 'PENDIENTE'
   },
   novedades: {
     type: String,
