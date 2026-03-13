@@ -37,6 +37,20 @@ app.set('io', io);
 io.on('connection', (socket) => {
   console.log('🟢 Nuevo dispositivo conectado en tiempo real:', socket.id);
 
+  // 👇 NUEVO: El frontend enviará los datos del usuario logueado para meterlo a su sala privada
+  socket.on('identificar_usuario', (userData) => {
+    if (!userData) return;
+
+    if (userData.rol === 'ADMIN') {
+      socket.join('room_admins');
+      console.log(`👤 Admin unido a sala: room_admins`);
+    } else if (userData.rol === 'EMPLEADA') {
+      const roomName = `room_empleada_${userData._id}`;
+      socket.join(roomName);
+      console.log(`👩‍⚕️ Empleada unida a sala: ${roomName}`);
+    }
+  });
+
   socket.on('disconnect', () => {
     console.log('🔴 Dispositivo desconectado:', socket.id);
   });

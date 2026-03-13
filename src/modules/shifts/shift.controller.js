@@ -51,7 +51,11 @@ export const createShift = async (req, res) => {
 
     // 📢 --- NUEVO: AVISAR AL FRONTEND QUE HAY UN TURNO NUEVO ---
     const io = req.app.get('io');
-    if (io) io.emit('refresh_shifts', { mensaje: 'Nuevo turno programado' });
+    if (io) {
+      io.to('room_admins').to(`room_empleada_${empleada_id}`).emit('refresh_shifts', { 
+        mensaje: 'Nuevo turno programado' 
+      });
+    }
     // ------------------------------------------------------------
 
     res.status(201).json({
@@ -68,6 +72,9 @@ export const createShift = async (req, res) => {
 export const completeShift = async (req, res) => {
   try {
     const { id } = req.params;
+    // 👇 NUEVO: Recibimos si la señora mayor ya le pagó a la empleada
+    const { pago_empleada_realizado } = req.body; 
+
     const shift = await Shift.findById(id);
 
     if (!shift) return res.status(404).json({ success: false, message: 'Turno no encontrado' });
@@ -75,8 +82,9 @@ export const completeShift = async (req, res) => {
       return res.status(400).json({ success: false, message: 'El turno ya estaba finalizado' });
     }
 
-    // 1. Cambiar estado
+    // 1. Cambiar estado y guardar si se le pagó a la empleada
     shift.estado_turno = 'FINALIZADO';
+    shift.pago_empleada_realizado = pago_empleada_realizado || false;
     await shift.save();
 
     // 2. AHORA SÍ afectamos la cartera del cliente
@@ -84,9 +92,13 @@ export const completeShift = async (req, res) => {
       $inc: { saldo_pendiente: shift.precio_cobrado }
     });
 
-    // 📢 --- NUEVO: AVISAR AL FRONTEND QUE UN TURNO SE FINALIZÓ ---
+    // 📢 --- NUEVO: AVISAR SOLO A LOS ADMINS Y A LA EMPLEADA INVOLUCRADA ---
     const io = req.app.get('io');
-    if (io) io.emit('refresh_shifts', { mensaje: 'Un turno ha sido finalizado' });
+    if (io) {
+      io.to('room_admins').to(`room_empleada_${shift.empleada_id.toString()}`).emit('refresh_shifts', { 
+        mensaje: 'Un turno ha sido finalizado' 
+      });
+    }
     // -------------------------------------------------------------
 
     res.status(200).json({
@@ -181,7 +193,11 @@ export const cancelShift = async (req, res) => {
 
     // 📢 --- NUEVO: AVISAR AL FRONTEND QUE SE CANCELÓ UN TURNO ---
     const io = req.app.get('io');
-    if (io) io.emit('refresh_shifts', { mensaje: 'Un turno ha sido cancelado' });
+    if (io) {
+      io.to('room_admins').to(`room_empleada_${shift.empleada_id.toString()}`).emit('refresh_shifts', { 
+        mensaje: 'Un turno ha sido cancelado' 
+      });
+    }
     // -------------------------------------------------------------
 
     res.status(200).json({
@@ -226,7 +242,11 @@ export const updateShift = async (req, res) => {
 
     // 📢 --- NUEVO: AVISAR AL FRONTEND QUE SE ACTUALIZÓ UN TURNO ---
     const io = req.app.get('io');
-    if (io) io.emit('refresh_shifts', { mensaje: 'Un turno ha sido modificado' });
+    if (io) {
+      io.to('room_admins').to(`room_empleada_${turnoActualizado.empleada_id.toString()}`).emit('refresh_shifts', { 
+        mensaje: 'Un turno ha sido modificado' 
+      });
+    }
     // --------------------------------------------------------------
 
     res.status(200).json({

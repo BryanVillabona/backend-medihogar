@@ -44,7 +44,10 @@ const shiftSchema = new Schema({
     type: Number,
     required: true
   },
-  // ------------------------------------------
+  pago_empleada_realizado: {
+    type: Boolean,
+    default: false
+  },
   novedades: {
     type: String,
     default: ''

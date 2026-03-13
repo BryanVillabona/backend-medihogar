@@ -54,14 +54,22 @@ export const generateMonthlyPayroll = async (req, res) => {
     // Si queremos la nómina de una sola empleada, lo agregamos al filtro
     if (empleada_id) shiftMatch.empleada_id = empleada_id;
 
-    // 3. Pipeline de Agregación para sumar los Turnos
+    // 3. Pipeline de Agregación para sumar los Turnos (¡AQUÍ ESTÁ LA MAGIA!)
     const turnosConsolidados = await Shift.aggregate([
       { $match: shiftMatch },
       {
         $group: {
           _id: '$empleada_id',
-          total_turnos: { $sum: 1 },
-          total_ganado_turnos: { $sum: '$costo_pagado' }
+          total_turnos: { $sum: 1 }, // Cuenta cuántos turnos hizo en total
+          total_ganado_turnos: { $sum: '$costo_pagado' }, // Suma el valor de TODOS los turnos
+          // 👇 NUEVO: Suma el dinero de los turnos que la señora marcó como "Ya pagados"
+          dinero_turnos_pagados: { 
+            $sum: { $cond: [{ $eq: ['$pago_empleada_realizado', true] }, '$costo_pagado', 0] }
+          },
+          // 👇 NUEVO: Suma el dinero de los turnos que aún se le deben
+          dinero_turnos_pendientes: { 
+            $sum: { $cond: [{ $ne: ['$pago_empleada_realizado', true] }, '$costo_pagado', 0] }
+          }
         }
       }
     ]);
@@ -97,10 +105,11 @@ export const generateMonthlyPayroll = async (req, res) => {
     const empleadasData = await User.find({ _id: { $in: empleadasIds } }).select('nombre_completo cedula tipo_empleada');
 
     for (const emp of empleadasData) {
-      const turnos = turnosConsolidados.find(t => t._id.toString() === emp._id.toString()) || { total_turnos: 0, total_ganado_turnos: 0 };
+      const turnos = turnosConsolidados.find(t => t._id.toString() === emp._id.toString()) || { total_turnos: 0, total_ganado_turnos: 0, dinero_turnos_pagados: 0, dinero_turnos_pendientes: 0 };
       const nov = novedades.find(n => n._id.toString() === emp._id.toString()) || { total_ingresos_extra: 0, total_deducciones: 0 };
 
-      const neto_a_pagar = (turnos.total_ganado_turnos + nov.total_ingresos_extra) - nov.total_deducciones;
+      // 👇 MODIFICADO: El cálculo del neto a pagar ahora usa solo los turnos pendientes
+      const neto_a_pagar = (turnos.dinero_turnos_pendientes + nov.total_ingresos_extra) - nov.total_deducciones;
 
       nominaFinal.push({
         empleada: {
@@ -111,10 +120,12 @@ export const generateMonthlyPayroll = async (req, res) => {
         },
         resumen: {
           cantidad_turnos: turnos.total_turnos,
-          ganancia_por_turnos: turnos.total_ganado_turnos,
+          ganancia_por_turnos: turnos.total_ganado_turnos, // Lo que generó en el mes
+          turnos_pagados_anticipado: turnos.dinero_turnos_pagados, // 👇 NUEVO: Lo que ya se le dio
+          turnos_por_pagar: turnos.dinero_turnos_pendientes, // 👇 NUEVO: Lo que falta por darle
           bonos_extras: nov.total_ingresos_extra,
           descuentos_prestamos: nov.total_deducciones,
-          neto_a_pagar: neto_a_pagar
+          neto_a_pagar: neto_a_pagar // El cheque final
         }
       });
     }
