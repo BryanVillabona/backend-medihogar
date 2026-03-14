@@ -8,8 +8,8 @@ const catalogSchema = new Schema({
   },
   duracion_horas: {
     type: Number,
-    enum: [10, 12, 24], // Restringimos para evitar errores de tipeo
-    required: true
+    required: true,
+    min: [1, 'La duración debe ser de al menos 1 hora'] // Reemplazamos el enum estricto por un mínimo lógico
   },
   precio_cobrado_cliente: {
     type: Number,
@@ -21,7 +21,7 @@ const catalogSchema = new Schema({
   },
   estado: {
     type: Boolean,
-    default: true // Por si en el futuro descontinúan un servicio, lo apagamos en vez de borrarlo
+    default: true // Mantenemos el estado por defecto activo
   }
 }, { timestamps: true });
 

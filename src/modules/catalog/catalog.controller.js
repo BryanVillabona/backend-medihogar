@@ -21,11 +21,12 @@ export const createService = async (req, res) => {
   }
 };
 
-// Obtener todos los servicios activos (Para el frontend en React)
+// Obtener TODOS los servicios (Para el frontend en React)
 export const getActiveServices = async (req, res) => {
   try {
-    // Solo traemos los que están activos. Si un servicio se discontinua, no lo mostramos.
-    const services = await Catalog.find({ estado: true });
+    // Quitamos el filtro { estado: true } para que el administrador pueda ver 
+    // y volver a encender las tarifas inactivas desde el panel.
+    const services = await Catalog.find();
     
     res.status(200).json({
       success: true,
