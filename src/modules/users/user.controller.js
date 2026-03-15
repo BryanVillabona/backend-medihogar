@@ -1,6 +1,10 @@
 import User from './user.model.js';
 import bcrypt from 'bcryptjs';
 
+// 👇 NUEVO: Importamos los modelos financieros para calcular la deuda en tiempo real
+import Shift from '../shifts/shift.model.js';
+import PayrollAdjustment from '../payroll/payrollAdjustment.model.js';
+
 export const createUser = async (req, res) => {
   try {
     const userData = req.body;
@@ -44,15 +48,51 @@ export const createUser = async (req, res) => {
   }
 };
 
+// =========================================================================
+// OBTENER USUARIOS (AHORA CON CÁLCULO DE DEUDA EN TIEMPO REAL)
+// =========================================================================
 export const getUsers = async (req, res) => {
   try {
-    // 👇 CORRECCIÓN: Quitamos el filtro { estado_activa: true } 
-    // Para que el Admin pueda ver también a las inactivas en la tabla
-    const users = await User.find({}).select('-password');
+    // Usamos .lean() para que Mongoose nos devuelva objetos puros de JS y poder inyectarles la deuda
+    const users = await User.find({}).select('-password').lean();
     
+    // Buscamos todas las deudas activas en la clínica
+    const pendingShifts = await Shift.find({ estado_pago_empleada: 'PENDIENTE' }).lean();
+    const pendingAdjustments = await PayrollAdjustment.find({ estado: 'PENDIENTE' }).lean();
+
+    // Cruzamos la información
+    const usersWithDebt = users.map(user => {
+      const userId = user._id.toString();
+      let deuda_actual = 0;
+
+      // 1. Sumar turnos no pagados (usamos costo_pagado que es la variable oficial)
+      pendingShifts.forEach(turno => {
+        if (turno.empleada_id?.toString() === userId) {
+          deuda_actual += (turno.costo_pagado || 0);
+        }
+      });
+
+      // 2. Sumar bonos o restar préstamos pendientes
+      pendingAdjustments.forEach(ajuste => {
+        if (ajuste.empleada_id?.toString() === userId) {
+          if (ajuste.tipo_movimiento === 'INGRESO') deuda_actual += ajuste.monto;
+          if (ajuste.tipo_movimiento === 'EGRESO') deuda_actual -= ajuste.monto;
+        }
+      });
+
+      // Evitar saldos negativos confusos
+      if (deuda_actual < 0) deuda_actual = 0;
+
+      // Retornamos el usuario con su nuevo atributo 'deuda_actual'
+      return {
+        ...user,
+        deuda_actual
+      };
+    });
+
     res.status(200).json({
       success: true,
-      data: users
+      data: usersWithDebt
     });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Error al obtener los usuarios', error: error.message });
@@ -103,7 +143,6 @@ export const updateUser = async (req, res) => {
     delete updateData.password;
 
     // 👇 ESCUDO DE SEGURIDAD PARA AUTO-EDICIÓN 👇
-    // Si el usuario que hace la petición NO es ADMIN, le bloqueamos los campos críticos
     const userRole = req.user?.rol_sistema || req.user?.rol;
     
     if (userRole !== 'ADMIN') {
@@ -115,7 +154,7 @@ export const updateUser = async (req, res) => {
     }
     // 👆 ========================================== 👆
 
-    // 👇 MAPEO para cuando edites a una empleada (solo si 'estado' superó el escudo anterior)
+    // 👇 MAPEO para cuando edites a una empleada
     if (updateData.estado !== undefined) {
       updateData.estado_activa = updateData.estado;
     }
