@@ -51,7 +51,7 @@ export const calculateEmployeePayroll = async (req, res) => {
     let bonos_totales = 0;
     let bonos_pagados = 0;
     let prestamos_totales = 0;
-    let prestamos_aplicados = 0; // 🌟 NUEVO: Rastrear la plata que ya nos devolvieron
+    let prestamos_aplicados = 0; 
 
     novedades.forEach(n => {
       if (n.estado !== 'ANULADO') {
@@ -61,22 +61,21 @@ export const calculateEmployeePayroll = async (req, res) => {
         }
         if (n.tipo_movimiento === 'EGRESO') {
           prestamos_totales += n.monto;
-          if (n.estado === 'APLICADO') prestamos_aplicados += n.monto; // 🌟 NUEVO
+          if (n.estado === 'APLICADO') prestamos_aplicados += n.monto; 
         }
       }
     });
 
     const total_devengado = sueldo_turnos + bonos_totales;
     
-    // 🌟 MATEMÁTICA PURA DE CAJA: El efectivo real que le hemos consignado a la fecha
-    let pagos_ya_realizados = (turnos_pagados + bonos_pagados) - prestamos_aplicados;
-    if (pagos_ya_realizados < 0) pagos_ya_realizados = 0;
+    // 🌟 MATEMÁTICA CORREGIDA: Sumamos solo lo que ha salido de la clínica
+    let pagos_ya_realizados = turnos_pagados + bonos_pagados;
 
     // Deducido = Lo que ya le consignamos en caja + Su deuda histórica (préstamos totales)
     const total_deducido = pagos_ya_realizados + prestamos_totales;
     let neto_a_pagar = total_devengado - total_deducido;
     
-    if (neto_a_pagar < 0) neto_a_pagar = 0;
+    // ⚠️ ELIMINADO EL CANDADO DE CERO: Ahora neto_a_pagar PUEDE SER NEGATIVO si ella debe.
 
     res.status(200).json({
       success: true,
@@ -89,7 +88,7 @@ export const calculateEmployeePayroll = async (req, res) => {
           sueldo_turnos,
           bonos_totales,
           prestamos_totales,
-          pagos_ya_realizados, // 🌟 EXPORTAMOS LA VARIABLE MAESTRA
+          pagos_ya_realizados, 
           total_devengado,
           total_deducido,
           neto_a_pagar 
@@ -243,12 +242,12 @@ export const getGlobalReport = async (req, res) => {
     const detalleNomina = Object.values(nominaMap).map(emp => {
       emp.total_costo_empresa = emp.sueldo_turnos + emp.bonos;
       
-      // La misma matemática de caja aplicada al Excel
-      emp.pagos_ya_realizados = (emp.turnos_pagados + emp.bonos_pagados) - emp.prestamos_aplicados;
-      if (emp.pagos_ya_realizados < 0) emp.pagos_ya_realizados = 0;
+      // 🌟 MATEMÁTICA CORREGIDA PARA EL EXCEL
+      emp.pagos_ya_realizados = emp.turnos_pagados + emp.bonos_pagados;
 
       emp.neto_a_pagar = emp.total_costo_empresa - (emp.pagos_ya_realizados + emp.prestamos);
-      if (emp.neto_a_pagar < 0) emp.neto_a_pagar = 0;
+      // ⚠️ ELIMINADO EL CANDADO DE CERO
+
       return emp;
     });
 
