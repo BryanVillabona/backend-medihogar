@@ -63,3 +63,26 @@ export const registerPayment = async (req, res) => {
     });
   }
 };
+
+// 👇 NUEVO: Obtener el historial completo de pagos (Auditoría) 👇
+export const getPaymentHistory = async (req, res) => {
+  try {
+    // Buscamos los últimos 100 pagos, ordenados por fecha de creación (más recientes primero)
+    // Hacemos populate para traer el nombre y cédula del cliente asociado.
+    const pagos = await Payment.find()
+      .sort({ createdAt: -1 })
+      .populate('cliente_id', 'nombre_responsable documento_responsable')
+      .limit(100); 
+
+    res.status(200).json({
+      success: true,
+      data: pagos
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Error al obtener el historial de pagos',
+      error: error.message
+    });
+  }
+};

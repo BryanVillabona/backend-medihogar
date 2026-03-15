@@ -138,3 +138,26 @@ export const generateMonthlyPayroll = async (req, res) => {
     res.status(500).json({ success: false, message: 'Error al generar nómina', error: error.message });
   }
 };
+
+// Obtener el historial de novedades (Auditoría de Bonos y Préstamos)
+export const getAdjustmentHistory = async (req, res) => {
+  try {
+    // Buscamos los últimos 100 ajustes, ordenados por fecha
+    // Hacemos populate para traer el nombre de la empleada
+    const adjustments = await PayrollAdjustment.find()
+      .sort({ fecha_aplicacion: -1, createdAt: -1 })
+      .populate('empleada_id', 'nombre_completo documento')
+      .limit(100); 
+
+    res.status(200).json({
+      success: true,
+      data: adjustments
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Error al obtener el historial de novedades',
+      error: error.message
+    });
+  }
+};

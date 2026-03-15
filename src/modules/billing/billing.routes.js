@@ -2,9 +2,9 @@ import { Router } from 'express';
 // 1. Importamos las funciones propias de billing (Nómina, Facturas y PAGO A EMPLEADAS)
 import { calculateEmployeePayroll, generateClientStatement, getGlobalReport, payEmployee } from './billing.controller.js';
 // 2. Importamos la función de pagos de clientes
-import { registerPayment } from './payment.controller.js';
+import { registerPayment, getPaymentHistory } from './payment.controller.js';
 // 3. Importamos las novedades desde el módulo de payroll
-import { registerPayrollAdjustment } from '../payroll/payroll.controller.js';
+import { registerPayrollAdjustment, getAdjustmentHistory } from '../payroll/payroll.controller.js';
 
 // Middlewares
 import { verifyToken, verifyAdmin } from '../../core/middlewares/auth.middleware.js';
@@ -22,6 +22,9 @@ router.get('/payroll/:empleadaId', verifyToken, verifyAdmin, calculateEmployeePa
 // 👇 NUEVO: Ejecutar el pago de nómina
 router.post('/pay-employee', verifyToken, verifyAdmin, payEmployee);
 
+// Obtener historial de novedades
+router.get('/adjustments', verifyToken, verifyAdmin, getAdjustmentHistory);
+
 // Registrar un bono o préstamo (viene de payroll.controller.js)
 router.post('/adjustments', verifyToken, verifyAdmin, registerPayrollAdjustment);
 
@@ -31,6 +34,9 @@ router.post('/adjustments', verifyToken, verifyAdmin, registerPayrollAdjustment)
 // ==========================================
 // Generar estado de cuenta (factura del mes)
 router.get('/statement/:clienteId', verifyToken, verifyAdmin, generateClientStatement);
+
+// Obtener historial de pagos (Libro mayor de ingresos)
+router.get('/payments', verifyToken, verifyAdmin, getPaymentHistory);
 
 // Registrar un pago/abono de cliente
 router.post('/payments', verifyToken, verifyAdmin, validateSchema(registerPaymentSchema), registerPayment);
