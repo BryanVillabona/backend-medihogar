@@ -5,7 +5,7 @@ import Payment from './payment.model.js';
 import PayrollAdjustment from '../payroll/payrollAdjustment.model.js'; 
 
 // =========================================================================
-// 1. NÓMINA: Liquidar a una empleada (MATEMÁTICA CORREGIDA)
+// 1. NÓMINA: Liquidar a una empleada (MATEMÁTICA DE CAJA PERFECTA)
 // =========================================================================
 export const calculateEmployeePayroll = async (req, res) => {
   try {
@@ -49,22 +49,34 @@ export const calculateEmployeePayroll = async (req, res) => {
     }).sort('fecha_aplicacion');
 
     let bonos_totales = 0;
+    let bonos_pagados = 0;
     let prestamos_totales = 0;
+    let prestamos_aplicados = 0; // 🌟 NUEVO: Rastrear la plata que ya nos devolvieron
 
     novedades.forEach(n => {
       if (n.estado !== 'ANULADO') {
-        if (n.tipo_movimiento === 'INGRESO') bonos_totales += n.monto;
-        if (n.tipo_movimiento === 'EGRESO') prestamos_totales += n.monto;
+        if (n.tipo_movimiento === 'INGRESO') {
+          bonos_totales += n.monto;
+          if (n.estado === 'APLICADO') bonos_pagados += n.monto; 
+        }
+        if (n.tipo_movimiento === 'EGRESO') {
+          prestamos_totales += n.monto;
+          if (n.estado === 'APLICADO') prestamos_aplicados += n.monto; // 🌟 NUEVO
+        }
       }
     });
 
-    // LÓGICA EMPRESARIAL REAL:
-    // Total Devengado = Lo que produjo la chica (Turnos + Bonos)
     const total_devengado = sueldo_turnos + bonos_totales;
-    // Total a Descontarle = Lo que ya se le dio (Turnos ya pagados + Préstamos)
-    const total_deducido = turnos_pagados + prestamos_totales;
-    // Cheque a transferirle hoy
-    const neto_a_pagar = total_devengado - total_deducido;
+    
+    // 🌟 MATEMÁTICA PURA DE CAJA: El efectivo real que le hemos consignado a la fecha
+    let pagos_ya_realizados = (turnos_pagados + bonos_pagados) - prestamos_aplicados;
+    if (pagos_ya_realizados < 0) pagos_ya_realizados = 0;
+
+    // Deducido = Lo que ya le consignamos en caja + Su deuda histórica (préstamos totales)
+    const total_deducido = pagos_ya_realizados + prestamos_totales;
+    let neto_a_pagar = total_devengado - total_deducido;
+    
+    if (neto_a_pagar < 0) neto_a_pagar = 0;
 
     res.status(200).json({
       success: true,
@@ -75,9 +87,9 @@ export const calculateEmployeePayroll = async (req, res) => {
         resumen: {
           cantidad_turnos: turnosFormateados.length,
           sueldo_turnos,
-          turnos_pagados,
           bonos_totales,
           prestamos_totales,
+          pagos_ya_realizados, // 🌟 EXPORTAMOS LA VARIABLE MAESTRA
           total_devengado,
           total_deducido,
           neto_a_pagar 
@@ -159,7 +171,7 @@ export const generateClientStatement = async (req, res) => {
 };
 
 // =========================================================================
-// 3. REPORTE GERENCIAL (EXCEL) - MUESTRA EL COSTO TOTAL POR EMPLEADA
+// 3. REPORTE GERENCIAL (EXCEL) (MATEMÁTICA CORREGIDA)
 // =========================================================================
 export const getGlobalReport = async (req, res) => {
   try {
@@ -185,13 +197,10 @@ export const getGlobalReport = async (req, res) => {
       fecha_pago: { $gte: startOfMonth, $lte: endOfMonth }
     }).populate('cliente_id', 'nombre_responsable pacientes saldo_pendiente');
 
-    // Cálculos Globales para los KPIs de la vista
     const ingresosBrutos = turnos.reduce((sum, t) => sum + t.precio_cobrado, 0);
     const costoBaseTurnos = turnos.reduce((sum, t) => sum + t.costo_pagado, 0);
     const costoBonos = novedades.filter(n => n.tipo_movimiento === 'INGRESO').reduce((sum, n) => sum + n.monto, 0);
     
-    // El costo total de tu empresa es lo que producen trabajando + los bonos que les das.
-    // Los préstamos no se restan del costo global, porque la plata ya salió de tu empresa de todos modos.
     const costoTotalEmpleadas = costoBaseTurnos + costoBonos;
     const utilidadBruta = ingresosBrutos - costoTotalEmpleadas;
 
@@ -202,9 +211,9 @@ export const getGlobalReport = async (req, res) => {
       if (!nominaMap[id]) {
         nominaMap[id] = { 
           nombre: emp.nombre_completo, cedula: emp.cedula || 'N/A', rol: emp.tipo_empleada, 
-          cantidad_turnos: 0, sueldo_turnos: 0, bonos: 0, 
-          total_costo_empresa: 0, // <-- EL NUEVO CAMPO QUE PEDISTE
-          turnos_pagados_anticipo: 0, prestamos: 0, neto_a_pagar: 0 
+          cantidad_turnos: 0, sueldo_turnos: 0, bonos: 0, total_costo_empresa: 0, 
+          turnos_pagados: 0, bonos_pagados: 0, prestamos: 0, prestamos_aplicados: 0, 
+          pagos_ya_realizados: 0, neto_a_pagar: 0 
         };
       }
       return id;
@@ -215,20 +224,31 @@ export const getGlobalReport = async (req, res) => {
       const empId = initializeEmp(t.empleada_id);
       nominaMap[empId].cantidad_turnos += 1;
       nominaMap[empId].sueldo_turnos += t.costo_pagado;
-      if (t.estado_pago_empleada === 'PAGADO') nominaMap[empId].turnos_pagados_anticipo += t.costo_pagado;
+      if (t.estado_pago_empleada === 'PAGADO') nominaMap[empId].turnos_pagados += t.costo_pagado;
     });
 
     novedades.forEach(n => {
       if (!n.empleada_id) return;
       const empId = initializeEmp(n.empleada_id);
-      if (n.tipo_movimiento === 'INGRESO') nominaMap[empId].bonos += n.monto;
-      if (n.tipo_movimiento === 'EGRESO') nominaMap[empId].prestamos += n.monto;
+      if (n.tipo_movimiento === 'INGRESO') {
+        nominaMap[empId].bonos += n.monto;
+        if (n.estado === 'APLICADO') nominaMap[empId].bonos_pagados += n.monto; 
+      }
+      if (n.tipo_movimiento === 'EGRESO') {
+        nominaMap[empId].prestamos += n.monto;
+        if (n.estado === 'APLICADO') nominaMap[empId].prestamos_aplicados += n.monto; 
+      }
     });
 
-    // Calcular Totales Finales por Empleada
     const detalleNomina = Object.values(nominaMap).map(emp => {
       emp.total_costo_empresa = emp.sueldo_turnos + emp.bonos;
-      emp.neto_a_pagar = emp.total_costo_empresa - (emp.turnos_pagados_anticipo + emp.prestamos);
+      
+      // La misma matemática de caja aplicada al Excel
+      emp.pagos_ya_realizados = (emp.turnos_pagados + emp.bonos_pagados) - emp.prestamos_aplicados;
+      if (emp.pagos_ya_realizados < 0) emp.pagos_ya_realizados = 0;
+
+      emp.neto_a_pagar = emp.total_costo_empresa - (emp.pagos_ya_realizados + emp.prestamos);
+      if (emp.neto_a_pagar < 0) emp.neto_a_pagar = 0;
       return emp;
     });
 
@@ -264,12 +284,12 @@ export const getGlobalReport = async (req, res) => {
       }
     });
   } catch (error) {
-    res.status(500).json({ success: false, message: 'Error', error: error.message });
+    res.status(500).json({ success: false, message: 'Error al generar reporte global', error: error.message });
   }
 };
 
 // =========================================================================
-// 4. PAGAR NÓMINA (BUG DE "APLICADO" CORREGIDO)
+// 4. PAGAR NÓMINA 
 // =========================================================================
 export const payEmployee = async (req, res) => {
   try {
@@ -279,7 +299,6 @@ export const payEmployee = async (req, res) => {
       await Shift.updateMany({ _id: { $in: shiftIds } }, { $set: { estado_pago_empleada: 'PAGADO' } });
     }
     if (novedadIds && novedadIds.length > 0) {
-      // 👇 AQUÍ ESTABA EL BUG: Las novedades usan 'APLICADO', no 'PAGADO' 👇
       await PayrollAdjustment.updateMany({ _id: { $in: novedadIds } }, { $set: { estado: 'APLICADO' } });
     }
 
