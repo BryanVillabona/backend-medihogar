@@ -5,7 +5,7 @@ import Payment from './payment.model.js';
 import PayrollAdjustment from '../payroll/payrollAdjustment.model.js'; 
 
 // =========================================================================
-// 1. NÓMINA: Liquidar a una empleada (MATEMÁTICA DE CAJAS SEPARADAS)
+// 1. NÓMINA: Liquidar a una empleada
 // =========================================================================
 export const calculateEmployeePayroll = async (req, res) => {
   try {
@@ -65,26 +65,19 @@ export const calculateEmployeePayroll = async (req, res) => {
         }
       }
     });
-
-    // 🌟 MATEMÁTICA DEFINITIVA DE CAJAS INDEPENDIENTES 🌟
     
-    // 1. Lo que produjo en total
+    // 🌟 MATEMÁTICA CONTABLE PERFECTA 🌟
     const total_devengado = sueldo_turnos + bonos_totales;
     
-    // 2. El dinero en efectivo real que ya le hemos dado en la mano
-    const pagos_ya_realizados = turnos_pagados + bonos_pagados;
-    
-    // 3. Su "Bolsillo": Lo que produjo menos el efectivo que ya le dimos
-    const saldo_disponible_empleada = total_devengado - pagos_ya_realizados;
-    
-    // 4. Su "Deuda": Préstamos totales menos los que ya pagó (aplicados)
-    const deuda_activa_empleada = prestamos_totales - prestamos_aplicados;
+    // El efectivo real entregado descuenta los préstamos que ya fueron cruzados (Ej: 280k - 200k = 80k)
+    let pagos_ya_realizados = (turnos_pagados + bonos_pagados) - prestamos_aplicados;
+    if (pagos_ya_realizados < 0) pagos_ya_realizados = 0;
 
-    // 5. El Neto: Lo que tiene en el bolsillo menos lo que nos debe
-    let neto_a_pagar = saldo_disponible_empleada - deuda_activa_empleada;
+    // Deducido = Efectivo real transferido + Préstamos totales (Ej: 80k + 200k = 280k)
+    const total_deducido = pagos_ya_realizados + prestamos_totales;
     
-    // 6. Para las visuales (Lo que se dedujo del total devengado)
-    const total_deducido = pagos_ya_realizados + deuda_activa_empleada;
+    // Neto = 280k - 280k = 0. (Y si hay deuda, da negativo sin problemas).
+    let neto_a_pagar = total_devengado - total_deducido;
 
     res.status(200).json({
       success: true,
@@ -251,11 +244,11 @@ export const getGlobalReport = async (req, res) => {
     const detalleNomina = Object.values(nominaMap).map(emp => {
       emp.total_costo_empresa = emp.sueldo_turnos + emp.bonos;
       
-      const saldo_disponible = emp.total_costo_empresa - (emp.turnos_pagados + emp.bonos_pagados);
-      const deuda_activa = emp.prestamos - emp.prestamos_aplicados;
-      
-      emp.pagos_ya_realizados = emp.turnos_pagados + emp.bonos_pagados;
-      emp.neto_a_pagar = saldo_disponible - deuda_activa;
+      // 🌟 MATEMÁTICA CONTABLE PARA EXCEL 🌟
+      emp.pagos_ya_realizados = (emp.turnos_pagados + emp.bonos_pagados) - emp.prestamos_aplicados;
+      if (emp.pagos_ya_realizados < 0) emp.pagos_ya_realizados = 0;
+
+      emp.neto_a_pagar = emp.total_costo_empresa - (emp.pagos_ya_realizados + emp.prestamos);
 
       return emp;
     });
