@@ -1,3 +1,4 @@
+import mongoose from 'mongoose';
 import Shift from '../shifts/shift.model.js';
 import User from '../users/user.model.js';
 import Client from '../clients/client.model.js'; 
@@ -290,21 +291,44 @@ export const getGlobalReport = async (req, res) => {
 };
 
 // =========================================================================
-// 4. PAGAR NÓMINA 
+// 4. PAGAR NÓMINA (BLINDADO CON TRANSACCIONES ACID)
 // =========================================================================
 export const payEmployee = async (req, res) => {
+  // 1. Iniciamos la sesión de base de datos
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
   try {
     const { shiftIds, novedadIds } = req.body;
 
+    // 2. Ejecutamos las actualizaciones inyectándoles la { session }
     if (shiftIds && shiftIds.length > 0) {
-      await Shift.updateMany({ _id: { $in: shiftIds } }, { $set: { estado_pago_empleada: 'PAGADO' } });
+      await Shift.updateMany(
+        { _id: { $in: shiftIds } }, 
+        { $set: { estado_pago_empleada: 'PAGADO' } },
+        { session } // 👈 Vinculado a la transacción
+      );
     }
+    
     if (novedadIds && novedadIds.length > 0) {
-      await PayrollAdjustment.updateMany({ _id: { $in: novedadIds } }, { $set: { estado: 'APLICADO' } });
+      await PayrollAdjustment.updateMany(
+        { _id: { $in: novedadIds } }, 
+        { $set: { estado: 'APLICADO' } },
+        { session } // 👈 Vinculado a la transacción
+      );
     }
 
-    res.status(200).json({ success: true, message: 'Nómina pagada' });
+    // 3. Si todo salió perfecto, confirmamos (commit) los cambios en la BD
+    await session.commitTransaction();
+    res.status(200).json({ success: true, message: 'Nómina pagada y cruzada correctamente' });
+
   } catch (error) {
-    res.status(500).json({ success: false, message: 'Error', error: error.message });
+    // 🚨 4. Si ocurrió CUALQUIER error, revertimos (abort) todo para no descuadrar la plata
+    await session.abortTransaction();
+    console.error('🚨 Error en transacción de Nómina:', error);
+    res.status(500).json({ success: false, message: 'Error crítico al procesar el pago', error: error.message });
+  } finally {
+    // 5. Siempre cerramos la sesión para liberar memoria del servidor
+    session.endSession();
   }
 };
