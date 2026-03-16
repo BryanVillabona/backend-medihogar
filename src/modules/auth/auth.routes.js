@@ -1,8 +1,8 @@
 import { Router } from 'express';
-import { login } from './auth.controller.js';
+import { login, refreshToken } from './auth.controller.js'; // 👈 NUEVO: Importamos refreshToken
 import { validateSchema } from '../../core/middlewares/validate.middleware.js';
 import { loginSchema } from './auth.schema.js';
-import rateLimit from 'express-rate-limit'; // <-- NUEVO: Importamos el limitador
+import rateLimit from 'express-rate-limit';
 
 const router = Router();
 
@@ -14,12 +14,15 @@ const loginLimiter = rateLimit({
     success: false, 
     message: 'Demasiados intentos. Por seguridad, intente nuevamente en 15 minutos.' 
   },
-  standardHeaders: true, // Retorna la info del límite en los headers estándar
-  legacyHeaders: false, // Deshabilita los headers antiguos
+  standardHeaders: true, 
+  legacyHeaders: false, 
 });
 // 👆 ============================================== 👆
 
 // Añadimos el "loginLimiter" justo antes de que se valide el esquema y se intente hacer el login
 router.post('/login', loginLimiter, validateSchema(loginSchema), login);
+
+// 🌟 NUEVO: Endpoint para la rotación silenciosa de tokens (no lleva rateLimit estricto)
+router.post('/refresh', refreshToken);
 
 export default router;
