@@ -5,7 +5,7 @@ import Payment from './payment.model.js';
 import PayrollAdjustment from '../payroll/payrollAdjustment.model.js'; 
 
 // =========================================================================
-// 1. NÓMINA: Liquidar a una empleada (MATEMÁTICA DE CAJA PERFECTA)
+// 1. NÓMINA: Liquidar a una empleada (MATEMÁTICA DE CAJAS SEPARADAS)
 // =========================================================================
 export const calculateEmployeePayroll = async (req, res) => {
   try {
@@ -66,13 +66,25 @@ export const calculateEmployeePayroll = async (req, res) => {
       }
     });
 
+    // 🌟 MATEMÁTICA DEFINITIVA DE CAJAS INDEPENDIENTES 🌟
+    
+    // 1. Lo que produjo en total
     const total_devengado = sueldo_turnos + bonos_totales;
     
-    // 🌟 MATEMÁTICA PURA (Sin forzar ceros) 🌟
-    let pagos_ya_realizados = (turnos_pagados + bonos_pagados) - prestamos_aplicados;
+    // 2. El dinero en efectivo real que ya le hemos dado en la mano
+    const pagos_ya_realizados = turnos_pagados + bonos_pagados;
+    
+    // 3. Su "Bolsillo": Lo que produjo menos el efectivo que ya le dimos
+    const saldo_disponible_empleada = total_devengado - pagos_ya_realizados;
+    
+    // 4. Su "Deuda": Préstamos totales menos los que ya pagó (aplicados)
+    const deuda_activa_empleada = prestamos_totales - prestamos_aplicados;
 
-    const total_deducido = pagos_ya_realizados + prestamos_totales;
-    let neto_a_pagar = total_devengado - total_deducido;
+    // 5. El Neto: Lo que tiene en el bolsillo menos lo que nos debe
+    let neto_a_pagar = saldo_disponible_empleada - deuda_activa_empleada;
+    
+    // 6. Para las visuales (Lo que se dedujo del total devengado)
+    const total_deducido = pagos_ya_realizados + deuda_activa_empleada;
 
     res.status(200).json({
       success: true,
@@ -239,10 +251,11 @@ export const getGlobalReport = async (req, res) => {
     const detalleNomina = Object.values(nominaMap).map(emp => {
       emp.total_costo_empresa = emp.sueldo_turnos + emp.bonos;
       
-      // 🌟 MATEMÁTICA PURA (Sin forzar ceros) 🌟
-      emp.pagos_ya_realizados = (emp.turnos_pagados + emp.bonos_pagados) - emp.prestamos_aplicados;
-
-      emp.neto_a_pagar = emp.total_costo_empresa - (emp.pagos_ya_realizados + emp.prestamos);
+      const saldo_disponible = emp.total_costo_empresa - (emp.turnos_pagados + emp.bonos_pagados);
+      const deuda_activa = emp.prestamos - emp.prestamos_aplicados;
+      
+      emp.pagos_ya_realizados = emp.turnos_pagados + emp.bonos_pagados;
+      emp.neto_a_pagar = saldo_disponible - deuda_activa;
 
       return emp;
     });
