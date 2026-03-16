@@ -6,7 +6,8 @@ export const login = async (req, res) => {
   try {
     const { cedula, password } = req.body;
 
-    const user = await User.findOne({ cedula });
+    const user = await User.findOne({ cedula }).select('+password');
+    
     if (!user) {
       return res.status(404).json({ success: false, message: 'Credenciales inválidas' });
     }
