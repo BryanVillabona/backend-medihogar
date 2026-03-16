@@ -68,14 +68,10 @@ export const calculateEmployeePayroll = async (req, res) => {
 
     const total_devengado = sueldo_turnos + bonos_totales;
     
-    // 🌟 MATEMÁTICA RESTAURADA: Ahora sí cruza los préstamos aplicados 🌟
+    // 🌟 MATEMÁTICA PURA (Sin forzar ceros) 🌟
     let pagos_ya_realizados = (turnos_pagados + bonos_pagados) - prestamos_aplicados;
-    if (pagos_ya_realizados < 0) pagos_ya_realizados = 0;
 
-    // Deducido = Lo que ya le consignamos en caja + Su deuda histórica (préstamos totales)
     const total_deducido = pagos_ya_realizados + prestamos_totales;
-    
-    // El neto a pagar PUEDE SER NEGATIVO (No tiene candado a cero)
     let neto_a_pagar = total_devengado - total_deducido;
 
     res.status(200).json({
@@ -243,12 +239,10 @@ export const getGlobalReport = async (req, res) => {
     const detalleNomina = Object.values(nominaMap).map(emp => {
       emp.total_costo_empresa = emp.sueldo_turnos + emp.bonos;
       
-      // 🌟 MATEMÁTICA RESTAURADA PARA EXCEL 🌟
+      // 🌟 MATEMÁTICA PURA (Sin forzar ceros) 🌟
       emp.pagos_ya_realizados = (emp.turnos_pagados + emp.bonos_pagados) - emp.prestamos_aplicados;
-      if (emp.pagos_ya_realizados < 0) emp.pagos_ya_realizados = 0;
 
       emp.neto_a_pagar = emp.total_costo_empresa - (emp.pagos_ya_realizados + emp.prestamos);
-      // Sin candado a cero.
 
       return emp;
     });
