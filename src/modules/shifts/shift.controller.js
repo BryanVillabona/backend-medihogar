@@ -1,12 +1,11 @@
-import mongoose from 'mongoose'; // 👈 Necesario para las transacciones
+import mongoose from 'mongoose';
 import Shift from './shift.model.js';
 import User from '../users/user.model.js';
 import Catalog from '../catalog/catalog.model.js';
 import Client from '../clients/client.model.js';
-import { catchAsync } from '../../core/utils/catchAsync.js'; // 👈 Tu nuevo limpiador de errores
+import { catchAsync } from '../../core/utils/catchAsync.js';
 
 export const createShift = catchAsync(async (req, res) => {
-  // 🌟 FIX 1: Recibimos precio_cobrado y costo_pagado EXACTAMENTE como los envía el Frontend (SIN EL _CUSTOM)
   const { 
     cliente_id, paciente_id, empleada_id, fecha_servicio, jornada, duracion_horas, 
     novedades, rol_ejercido, precio_cobrado, costo_pagado 
@@ -23,7 +22,6 @@ export const createShift = catchAsync(async (req, res) => {
     estado: true
   });
 
-  // 🌟 FIX 2: Usamos las variables sin el "_custom"
   if (!tarifa && (!precio_cobrado || !costo_pagado)) {
     return res.status(400).json({ 
       success: false, 
@@ -31,7 +29,6 @@ export const createShift = catchAsync(async (req, res) => {
     });
   }
 
-  // 🌟 FIX 3: Prioridad absoluta a lo que envía el usuario (Frontend). 
   const precioFinalCliente = precio_cobrado || (tarifa ? tarifa.precio_cobrado_cliente : null);
   const costoFinalEmpleada = costo_pagado || (tarifa ? tarifa.costo_pagado_empleada : null);
 
@@ -64,22 +61,21 @@ export const completeShift = catchAsync(async (req, res) => {
     return res.status(400).json({ success: false, message: 'El turno ya estaba finalizado' });
   }
 
-  // 🌟 PROTECCIÓN ACID: El turno y la deuda del cliente se guardan en bloque
   const session = await mongoose.startSession();
   session.startTransaction();
 
   try {
     shift.estado_turno = 'FINALIZADO';
-    await shift.save({ session }); // Vinculado a la transacción
+    await shift.save({ session }); 
 
     await Client.findByIdAndUpdate(shift.cliente_id, {
       $inc: { saldo_pendiente: shift.precio_cobrado }
-    }, { session }); // Vinculado a la transacción
+    }, { session }); 
 
     await session.commitTransaction();
   } catch (error) {
     await session.abortTransaction();
-    throw error; // El catchAsync lo atrapará y mostrará el 500
+    throw error; 
   } finally {
     session.endSession();
   }
@@ -141,25 +137,9 @@ export const cancelShift = catchAsync(async (req, res) => {
   if (shift.estado_turno === 'CANCELADO') return res.status(400).json({ success: false, message: 'El turno ya se encuentra cancelado' });
   if (shift.estado_turno === 'FINALIZADO') return res.status(400).json({ success: false, message: 'No se puede cancelar un turno que ya finalizó' });
 
-  // 🌟 PROTECCIÓN ACID: El turno y la reversión de deuda del cliente se guardan en bloque
-  const session = await mongoose.startSession();
-  session.startTransaction();
-
-  try {
-    shift.estado_turno = 'CANCELADO';
-    await shift.save({ session });
-
-    await Client.findByIdAndUpdate(shift.cliente_id, {
-      $inc: { saldo_pendiente: -shift.precio_cobrado }
-    }, { session });
-
-    await session.commitTransaction();
-  } catch (error) {
-    await session.abortTransaction();
-    throw error;
-  } finally {
-    session.endSession();
-  }
+  // 🌟 FIX: Solo cambiamos el estado. NO tocamos las finanzas del cliente.
+  shift.estado_turno = 'CANCELADO';
+  await shift.save();
 
   const io = req.app.get('io');
   if (io) {
@@ -168,7 +148,7 @@ export const cancelShift = catchAsync(async (req, res) => {
     });
   }
 
-  res.status(200).json({ success: true, message: 'Turno cancelado. El saldo del cliente ha sido ajustado.' });
+  res.status(200).json({ success: true, message: 'Turno cancelado correctamente.' });
 });
 
 export const updateShift = catchAsync(async (req, res) => {

@@ -56,8 +56,12 @@ export const getUsers = async (req, res) => {
     // Usamos .lean() para que Mongoose nos devuelva objetos puros de JS y poder inyectarles la deuda
     const users = await User.find({}).select('-password').lean();
     
-    // Buscamos todas las deudas activas en la clínica
-    const pendingShifts = await Shift.find({ estado_pago_empleada: 'PENDIENTE' }).lean();
+    // 🌟 FIX: Buscamos deudas activas, pero EXCLUIMOS ROTUNDAMENTE los turnos CANCELADOS
+    const pendingShifts = await Shift.find({ 
+      estado_pago_empleada: 'PENDIENTE',
+      estado_turno: { $ne: 'CANCELADO' } // <--- EL ESCUDO ANTI-ZOMBIES
+    }).lean();
+    
     const pendingAdjustments = await PayrollAdjustment.find({ estado: 'PENDIENTE' }).lean();
 
     // Cruzamos la información
