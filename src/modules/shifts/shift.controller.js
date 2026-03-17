@@ -6,9 +6,10 @@ import Client from '../clients/client.model.js';
 import { catchAsync } from '../../core/utils/catchAsync.js'; // 👈 Tu nuevo limpiador de errores
 
 export const createShift = catchAsync(async (req, res) => {
+  // 🌟 FIX 1: Recibimos precio_cobrado y costo_pagado EXACTAMENTE como los envía el Frontend (SIN EL _CUSTOM)
   const { 
     cliente_id, paciente_id, empleada_id, fecha_servicio, jornada, duracion_horas, 
-    novedades, rol_ejercido, precio_cobrado_custom, costo_pagado_custom 
+    novedades, rol_ejercido, precio_cobrado, costo_pagado 
   } = req.body;
 
   const empleada = await User.findById(empleada_id);
@@ -22,15 +23,17 @@ export const createShift = catchAsync(async (req, res) => {
     estado: true
   });
 
-  if (!tarifa && (!precio_cobrado_custom || !costo_pagado_custom)) {
+  // 🌟 FIX 2: Usamos las variables sin el "_custom"
+  if (!tarifa && (!precio_cobrado || !costo_pagado)) {
     return res.status(400).json({ 
       success: false, 
       message: `No existe tarifa base para duración de ${duracion_horas}h. Debe ingresar los precios manualmente.` 
     });
   }
 
-  const precioFinalCliente = precio_cobrado_custom || tarifa.precio_cobrado_cliente;
-  const costoFinalEmpleada = costo_pagado_custom || tarifa.costo_pagado_empleada;
+  // 🌟 FIX 3: Prioridad absoluta a lo que envía el usuario (Frontend). 
+  const precioFinalCliente = precio_cobrado || (tarifa ? tarifa.precio_cobrado_cliente : null);
+  const costoFinalEmpleada = costo_pagado || (tarifa ? tarifa.costo_pagado_empleada : null);
 
   const nuevoTurno = new Shift({
     cliente_id, paciente_id, empleada_id, fecha_servicio, jornada, duracion_horas,
