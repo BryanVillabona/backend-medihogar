@@ -119,11 +119,13 @@ export const resetUserPassword = async (req, res) => {
     }
 
     const requesterId = req.user?.id || req.user?._id || req.user?.userId; 
+    const adminRoles = ['ADMIN', 'ADMIN_FINANZAS', 'ADMIN_TURNOS'];
     
-    if (userToUpdate.rol_sistema === 'ADMIN' && String(requesterId) !== String(id)) {
+    // 🌟 FIX: Nadie puede cambiarle la clave a UNA ADMINISTRADORA, excepto ella misma 🌟
+    if (adminRoles.includes(userToUpdate.rol_sistema) && String(requesterId) !== String(id)) {
       return res.status(403).json({ 
         success: false, 
-        message: 'Acceso Denegado: No tienes permisos para modificar las credenciales de otro Administrador.' 
+        message: 'Acceso Denegado: No tienes permisos para modificar las credenciales de esta Administradora.' 
       });
     }
 
@@ -148,13 +150,19 @@ export const updateUser = async (req, res) => {
 
     // 👇 ESCUDO DE SEGURIDAD PARA AUTO-EDICIÓN 👇
     const userRole = req.user?.rol_sistema || req.user?.rol;
+    const adminRoles = ['ADMIN', 'ADMIN_FINANZAS', 'ADMIN_TURNOS'];
     
+    // 🌟 FIX 1: Solo la Jefa Suprema puede cambiar roles.
     if (userRole !== 'ADMIN') {
       delete updateData.rol_sistema;
+    }
+
+    // 🌟 FIX 2: Si NO es ninguna administradora (ej: es una enfermera intentando hackear su perfil), no la dejamos cambiar cosas sensibles.
+    if (!adminRoles.includes(userRole)) {
       delete updateData.tipo_empleada;
       delete updateData.estado;
       delete updateData.estado_activa;
-      delete updateData.cedula; // La cédula no se cambia sola
+      delete updateData.cedula; 
     }
     // 👆 ========================================== 👆
 

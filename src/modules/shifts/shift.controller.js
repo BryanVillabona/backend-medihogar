@@ -95,7 +95,11 @@ export const completeShift = catchAsync(async (req, res) => {
 export const getShifts = catchAsync(async (req, res) => {
   const { startDate, endDate } = req.query;
   
-  const filtro = req.user.rol === 'ADMIN' ? {} : { empleada_id: req.user._id || req.user.id };
+  // 🌟 FIX 1: Permitimos que TODAS las administradoras reciban la base de datos completa 🌟
+  const adminRoles = ['ADMIN', 'ADMIN_FINANZAS', 'ADMIN_TURNOS'];
+  const isAdmin = adminRoles.includes(req.user.rol_sistema || req.user.rol);
+  
+  const filtro = isAdmin ? {} : { empleada_id: req.user._id || req.user.id };
 
   if (startDate && endDate) {
     filtro.fecha_servicio = { $gte: new Date(startDate), $lte: new Date(endDate) };
@@ -137,7 +141,6 @@ export const cancelShift = catchAsync(async (req, res) => {
   if (shift.estado_turno === 'CANCELADO') return res.status(400).json({ success: false, message: 'El turno ya se encuentra cancelado' });
   if (shift.estado_turno === 'FINALIZADO') return res.status(400).json({ success: false, message: 'No se puede cancelar un turno que ya finalizó' });
 
-  // 🌟 FIX: Solo cambiamos el estado. NO tocamos las finanzas del cliente.
   shift.estado_turno = 'CANCELADO';
   await shift.save();
 

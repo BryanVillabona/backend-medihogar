@@ -41,9 +41,12 @@ io.on('connection', (socket) => {
   socket.on('identificar_usuario', (userData) => {
     if (!userData) return;
 
-    if (userData.rol === 'ADMIN') {
+    // 🌟 FIX: Reconocemos a las 3 administradoras para la sala de control 🌟
+    const adminRoles = ['ADMIN', 'ADMIN_FINANZAS', 'ADMIN_TURNOS'];
+
+    if (adminRoles.includes(userData.rol)) {
       socket.join('room_admins');
-      console.log(`👤 Admin unido a sala: room_admins`);
+      console.log(`👤 Admin unido a sala: room_admins (${userData.rol})`);
     } else if (userData.rol === 'EMPLEADA') {
       const roomName = `room_empleada_${userData._id}`;
       socket.join(roomName);

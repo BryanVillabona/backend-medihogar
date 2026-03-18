@@ -18,7 +18,7 @@ const userSchema = new Schema({
   },
   rol_sistema: {
     type: String,
-    enum: ['ADMIN', 'EMPLEADA'],
+    enum: ['ADMIN', 'ADMIN_FINANZAS', 'ADMIN_TURNOS', 'EMPLEADA'],
     default: 'EMPLEADA'
   },
   tipo_empleada: {

@@ -2,12 +2,11 @@ import jwt from 'jsonwebtoken';
 import User from '../../modules/users/user.model.js'; // <-- NUEVO: Importamos el modelo de Usuario
 
 // 1. Guardián General (Verifica si estás logueado y ACTIVO)
-export const verifyToken = async (req, res, next) => { // <-- CAMBIO: Ahora es async
+export const verifyToken = async (req, res, next) => { 
   try {
     let token = req.headers.authorization;
 
     if (!token) {
-      // Cambiamos a 401 (No Autorizado) en lugar de 403
       return res.status(401).json({ success: false, message: 'No se proporcionó un token de seguridad' });
     }
 
@@ -33,35 +32,38 @@ export const verifyToken = async (req, res, next) => { // <-- CAMBIO: Ahora es a
     
     next();
   } catch (error) {
-    // 401 para token inválido o expirado
     return res.status(401).json({ success: false, message: 'Token inválido o expirado' });
   }
 };
 
 // 2. NUEVO: Guardián de Administrador (Verifica si eres el jefe)
 export const verifyAdmin = (req, res, next) => {
-  // Primero comprobamos que el usuario exista en la request (que haya pasado por verifyToken)
   if (!req.user) {
     return res.status(401).json({ success: false, message: 'Usuario no autenticado' });
   }
 
-  // Si el rol no es ADMIN, lanzamos un 403 (Prohibido: Sabes quién soy, pero no tengo permiso)
-  if (req.user.rol !== 'ADMIN') {
+  // 🌟 FIX: Reconocemos la jerarquía de los 3 niveles de administradoras 🌟
+  const adminRoles = ['ADMIN', 'ADMIN_FINANZAS', 'ADMIN_TURNOS'];
+  
+  if (!adminRoles.includes(req.user.rol)) {
     return res.status(403).json({ success: false, message: 'Acceso denegado. Se requieren permisos de Administrador.' });
   }
 
-  next(); // Si es ADMIN, lo dejamos pasar
+  next(); // Si es alguna de las 3 admins, la dejamos pasar
 };
 
 // 👇 NUEVO GUARDIA: Permite el paso si es ADMIN o si es el dueño de la cuenta 👇
 export const isSelfOrAdmin = (req, res, next) => {
   try {
-    const targetId = req.params.id; // El ID del usuario que se va a editar (viene en la URL)
-    const userId = req.user.id || req.user._id; // El ID del usuario que está logueado
+    const targetId = req.params.id; // El ID del usuario que se va a editar
+    const userId = req.user.id || req.user._id; // El ID del usuario logueado
     const userRole = req.user.rol_sistema || req.user.rol; // El rol del usuario logueado
 
-    // Si es ADMIN o si el ID logueado coincide con el ID que se quiere editar, lo dejamos pasar
-    if (userRole === 'ADMIN' || String(userId) === String(targetId)) {
+    // 🌟 FIX: Cualquier administradora o el dueño de la cuenta puede pasar 🌟
+    // (Recuerda que luego el user.controller.js bloqueará lo que no deben editar)
+    const adminRoles = ['ADMIN', 'ADMIN_FINANZAS', 'ADMIN_TURNOS'];
+
+    if (adminRoles.includes(userRole) || String(userId) === String(targetId)) {
       next();
     } else {
       return res.status(403).json({ message: 'Acceso denegado. Solo puedes modificar tu propia cuenta.' });
